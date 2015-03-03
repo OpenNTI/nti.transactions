@@ -63,7 +63,6 @@ class IWeakRefToMissing(IWeakRef):
 		Calling this before the reference is clear is not defined.
 		"""
 
-
 class ICachingWeakRef(IWeakRef):
 	"""
 	A weak ref that, as an implementation detail, may cache the referant.
