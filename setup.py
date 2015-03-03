@@ -19,7 +19,8 @@ TESTS_REQUIRE = [
 	'nose-progressive',
 	'nose2[coverage_plugin]',
 	'pyhamcrest',
-	'nti.nose_traceback_info'
+	'nti.nose_traceback_info',
+	'nti.testing'
 ]
 
 setup(
