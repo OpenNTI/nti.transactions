@@ -7,14 +7,5 @@
 	<include package="zope.security" file="meta.zcml" />
 	<include package="zope.component" />
 	<include package="zope.security" />
-	
-	<adapter factory="persistent.wref.WeakRef"
-			 provides=".interfaces.IWeakRef"
-			 for="persistent.interfaces.IPersistent" />
-
-	<!-- objects implementing no interface -->
-	<adapter factory="weakref.ref"
-			 provides=".interfaces.IWeakRef"
-			 for="" />
 
 </configure>

@@ -8,6 +8,10 @@ entry_points = {
 	],
 }
 
+import platform
+py_impl = getattr(platform, 'python_implementation', lambda: None)
+IS_PYPY = py_impl() == 'PyPy'
+
 TESTS_REQUIRE = [
 	'nose',
 	'nose-timer',
@@ -19,24 +23,20 @@ TESTS_REQUIRE = [
 ]
 
 setup(
-	name='nti.wref',
+	name='nti.transactions',
 	version=VERSION,
 	author='Jason Madden',
 	author_email='jason@nextthought.com',
-	description="NTI Weak References",
+	description="NTI Transactions Utility",
 	long_description=codecs.open('README.rst', encoding='utf-8').read(),
 	license='Proprietary',
-	keywords='Weak References',
+	keywords='ZODB Transactions',
 	classifiers=[
 		'Intended Audience :: Developers',
 		'Natural Language :: English',
 		'Operating System :: OS Independent',
 		'Programming Language :: Python :: 2',
 		'Programming Language :: Python :: 2.7',
-		'Programming Language :: Python :: 3',
-		'Programming Language :: Python :: 3.2',
-		'Programming Language :: Python :: 3.3',
-		'Programming Language :: Python :: 3.4',
 		'Programming Language :: Python :: Implementation :: CPython'
 	],
 	packages=find_packages('src'),
@@ -45,7 +45,12 @@ setup(
 	tests_require=TESTS_REQUIRE,
 	install_requires=[
 		'setuptools',
-		'persistent',
+		'dm.transaction.aborthook',
+		'gevent' if not IS_PYPY else '',
+		'greenlet' if not IS_PYPY else '',
+		'perfmetrics',
+		'transaction',
+		'ZODB',
 		'zope.component',
 		'zope.interface',
 		'zope.security'
