@@ -48,7 +48,6 @@ setup(
 		'setuptools',
 		'dm.transaction.aborthook',
 		'gevent' if not IS_PYPY else '',
-		'greenlet' if not IS_PYPY else '',
 		'perfmetrics',
 		'transaction',
 		'ZODB',
