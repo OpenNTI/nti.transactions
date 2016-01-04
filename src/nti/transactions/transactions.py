@@ -171,11 +171,11 @@ class ObjectDataManager(object):
 										 id(self),
 										 self.callable)
 
-	# # ISavepointDataManager
+	# ISavepointDataManager
 	def savepoint(self):
 		return self
 
-	# # IDatamanagerSavepoint
+	# IDatamanagerSavepoint
 	def rollback(self):
 		# See class comments: we have nothing to rollback
 		# from because we take no action until commit
@@ -284,10 +284,10 @@ class TransactionLoop(object):
 	attempts = 10
 	long_commit_duration = 6  # seconds
 
-	# : The default return value from :meth:`should_abort_due_to_no_side_effects`.
-	# : If you are not subclassing, or you do not need access to the arguments
-	# : of the called function to make this determination, you may set this
-	# : as an instance variable.
+	#: The default return value from :meth:`should_abort_due_to_no_side_effects`.
+	#: If you are not subclassing, or you do not need access to the arguments
+	#: of the called function to make this determination, you may set this
+	#: as an instance variable.
 	side_effect_free = False
 
 	def __init__(self, handler, retries=None, sleep=None,
