@@ -8,10 +8,6 @@ entry_points = {
 	],
 }
 
-import platform
-py_impl = getattr(platform, 'python_implementation', lambda: None)
-IS_PYPY = py_impl() == 'PyPy'
-
 TESTS_REQUIRE = [
 	'nose',
 	'nose-timer',
@@ -47,20 +43,17 @@ setup(
 	install_requires=[
 		'setuptools',
 		'dm.transaction.aborthook',
-		'gevent' if not IS_PYPY else '',
+		'gevent',
 		'perfmetrics',
 		'transaction',
 		'ZODB',
 		'zope.component',
+		'zope.exceptions',
 		'zope.interface',
 		'zope.security'
 	],
 	extras_require={
 		'test': TESTS_REQUIRE,
 	},
-	dependency_links=[
-		'git+https://github.com/NextThought/nti.nose_traceback_info.git#egg=nti.nose_traceback_info'
-	],
 	entry_points=entry_points
 )
- 

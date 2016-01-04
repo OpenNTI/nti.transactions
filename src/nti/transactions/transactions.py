@@ -24,19 +24,20 @@ from ZODB.loglevels import TRACE
 
 import transaction
 from transaction.interfaces import TransactionError
+from transaction.interfaces import IDataManagerSavepoint
+from transaction.interfaces import ISavepointDataManager
 
 try:
 	from gevent import sleep as _sleep
 	from gevent.queue import Full as QFull
-except ImportError: # pragma: no cover # pypy
+except ImportError:  # pragma: no cover # pypy
 	from Queue import Full as QFull
 	from time import sleep as _sleep
 
 from dm.transaction.aborthook import add_abort_hooks
-add_abort_hooks = add_abort_hooks # pylint
+add_abort_hooks = add_abort_hooks  # pylint
 
-@interface.implementer(transaction.interfaces.ISavepointDataManager,
-					   transaction.interfaces.IDataManagerSavepoint)
+@interface.implementer(ISavepointDataManager, IDataManagerSavepoint)
 class ObjectDataManager(object):
 	"""
 	A generic (and therefore relatively expensive)
@@ -69,7 +70,7 @@ class ObjectDataManager(object):
 
 	_EMPTY_KWARGS = {}
 
-	def __init__(self, target=None, method_name=None, call=None, 
+	def __init__(self, target=None, method_name=None, call=None,
 				 vote=None, args=(), kwargs=None):
 		"""
 		Construct a data manager. You must pass either the `target` and `method_name` arguments
@@ -88,7 +89,7 @@ class ObjectDataManager(object):
 		"""
 		self.target = target
 		if method_name:
-			self.callable = getattr( target, method_name )
+			self.callable = getattr(target, method_name)
 		else:
 			self.callable = call
 
@@ -144,12 +145,12 @@ class ObjectDataManager(object):
 
 	# No subtransaction support.
 	def abort_sub(self, tx):
-		pass  #pragma NO COVERAGE
+		pass  # pragma NO COVERAGE
 
 	commit_sub = abort_sub
 
 	def beforeCompletion(self, tx):
-		pass  #pragma NO COVERAGE
+		pass  # pragma NO COVERAGE
 
 	afterCompletion = beforeCompletion
 
@@ -170,11 +171,11 @@ class ObjectDataManager(object):
 										 id(self),
 										 self.callable)
 
-	## ISavepointDataManager
+	# # ISavepointDataManager
 	def savepoint(self):
 		return self
 
-	## IDatamanagerSavepoint
+	# # IDatamanagerSavepoint
 	def rollback(self):
 		# See class comments: we have nothing to rollback
 		# from because we take no action until commit
@@ -188,7 +189,7 @@ class _QueuePutDataManager(ObjectDataManager):
 	"""
 
 	def __init__(self, queue, method, args=()):
-		super(_QueuePutDataManager,self).__init__( target=queue, call=method, args=args )
+		super(_QueuePutDataManager, self).__init__(target=queue, call=method, args=args)
 		# NOTE: See the `sortKey` method. The use of the queue as the target
 		# is critical to ensure that the FIFO property holds when multiple objects
 		# are added to a queue during a transaction
@@ -199,7 +200,7 @@ class _QueuePutDataManager(ObjectDataManager):
 			# So retry logic kicks in?
 			raise QFull()
 
-def put_nowait( queue, obj ):
+def put_nowait(queue, obj):
 	"""
 	Transactionally puts `obj` in `queue`. The `obj` will only be visible
 	in the queue after the current transaction successfully commits.
@@ -209,40 +210,40 @@ def put_nowait( queue, obj ):
 	See :class:`gevent.queue.Queue` and :class:`Queue.Full` and :mod:`gevent.queue`.
 	"""
 	transaction.get().join(
-		_QueuePutDataManager( queue,
+		_QueuePutDataManager(queue,
 							  queue.put_nowait,
-							  args=(obj,) ) )
+							  args=(obj,)))
 
-def do( *args, **kwargs ):
+def do(*args, **kwargs):
 	"""
 	Establishes a IDataManager in the current transaction.
 	See :class:`ObjectDataManager` for the possible arguments.
 	"""
 	transaction.get().join(
-		ObjectDataManager( *args, **kwargs ) )
+		ObjectDataManager(*args, **kwargs))
 
 from ZODB.POSException import StorageError
 
-def _do_commit( tx, description, long_commit_duration ):
+def _do_commit(tx, description, long_commit_duration):
 	exc_info = sys.exc_info()
 	try:
-		duration = _timing( tx.commit, 'transaction.commit' )
-		logger.log( TRACE, "Committed transaction for %s in %ss", description, duration )
-		if duration > long_commit_duration: # pragma: no cover
+		duration = _timing(tx.commit, 'transaction.commit')
+		logger.log(TRACE, "Committed transaction for %s in %ss", description, duration)
+		if duration > long_commit_duration:  # pragma: no cover
 			# We held (or attempted to hold) locks for a really, really, long time. Why?
-			logger.warn( "Slow running commit for %s in %ss", description, duration )
+			logger.warn("Slow running commit for %s in %ss", description, duration)
 	except TypeError:
 		# Translate this into something meaningful
 		exc_info = sys.exc_info()
 		raise StorageError, exc_info[1], exc_info[2]
-	except (AssertionError,ValueError): # pragma: no cover
+	except (AssertionError, ValueError):  # pragma: no cover
 		# We've seen this when we are recalled during retry handling. The higher level
 		# is in the process of throwing a different exception and the transaction is
 		# already toast, so this commit would never work, but we haven't lost anything;
 		# The sad part is that this assertion error overrides the stack trace for what's currently
 		# in progress
 		# TODO: Prior to transaction 1.4.0, this was only an AssertionError. 1.4 makes it a ValueError, which is hard to distinguish and might fail retries?
-		logger.exception( "Failing to commit; should already be an exception in progress" )
+		logger.exception("Failing to commit; should already be an exception in progress")
 		if exc_info and exc_info[0]:
 			raise exc_info[0], None, exc_info[2]
 
@@ -250,7 +251,7 @@ def _do_commit( tx, description, long_commit_duration ):
 
 from perfmetrics import Metric
 
-def _timing( operation, name):
+def _timing(operation, name):
 	"""
 	Run the `operation` callable, returning the number of seconds it took.
 	"""
@@ -274,24 +275,23 @@ class TransactionLoop(object):
 
 	class AbortException(Exception):
 
-		def __init__( self, response, reason ):
-			Exception.__init__( self )
+		def __init__(self, response, reason):
+			Exception.__init__(self)
 			self.response = response
 			self.reason = reason
 
-
 	sleep = None
 	attempts = 10
-	long_commit_duration = 6 # seconds
+	long_commit_duration = 6  # seconds
 
-	#: The default return value from :meth:`should_abort_due_to_no_side_effects`.
-	#: If you are not subclassing, or you do not need access to the arguments
-	#: of the called function to make this determination, you may set this
-	#: as an instance variable.
+	# : The default return value from :meth:`should_abort_due_to_no_side_effects`.
+	# : If you are not subclassing, or you do not need access to the arguments
+	# : of the called function to make this determination, you may set this
+	# : as an instance variable.
 	side_effect_free = False
 
-	def __init__( self, handler, retries=None, sleep=None, 
-				 long_commit_duration=None ):
+	def __init__(self, handler, retries=None, sleep=None,
+				 long_commit_duration=None):
 		self.handler = handler
 		if retries is not None:
 			self.attempts = retries + 1
@@ -300,7 +300,7 @@ class TransactionLoop(object):
 		if sleep is not None:
 			self.sleep = sleep
 
-	def prep_for_retry( self, number, *args, **kwargs ):
+	def prep_for_retry(self, number, *args, **kwargs):
 		"""
 		Called just after a transaction begins if there will be
 		more than one attempt possible. Do any preparation
@@ -308,7 +308,7 @@ class TransactionLoop(object):
 		self.AbortException.
 		"""
 
-	def should_abort_due_to_no_side_effects( self, *args, **kwargs ):
+	def should_abort_due_to_no_side_effects(self, *args, **kwargs):
 		"""
 		Called after the handler has run. If the handler should
 		have produced no side effects and the transaction can be aborted
@@ -318,18 +318,18 @@ class TransactionLoop(object):
 		"""
 		return self.side_effect_free
 
-	def should_veto_commit( self, result, *args, **kwargs ):
+	def should_veto_commit(self, result, *args, **kwargs):
 		"""
 		Called after the handler has run. If the result of the handler
 		should abort the transaction, return True.
 		"""
 		return False
 
-	def describe_transaction( self, *args, **kwargs ):
+	def describe_transaction(self, *args, **kwargs):
 		return "Unknown"
 
-	def run_handler( self, *args, **kwargs ):
-		return self.handler( *args, **kwargs )
+	def run_handler(self, *args, **kwargs):
+		return self.handler(*args, **kwargs)
 
 	def __free(self, tx):
 		"""
@@ -366,7 +366,7 @@ class TransactionLoop(object):
 		t, v = exc_info[:-1]
 		retryable = False
 		try:
-			retryable = transaction.manager._retryable( t, v )
+			retryable = transaction.manager._retryable(t, v)
 			if retryable:
 				return retryable
 		except Exception:
@@ -383,50 +383,50 @@ class TransactionLoop(object):
 			return retryable
 
 
-	def __call__( self, *args, **kwargs ):
+	def __call__(self, *args, **kwargs):
 		# NOTE: We don't handle repoze.tm being in the pipeline
 
 		number = self.attempts
-		note = self.describe_transaction( *args, **kwargs )
+		note = self.describe_transaction(*args, **kwargs)
 
 		while number:
 			number -= 1
-			tx = None # In case there's an exception /beginning/ the transaction, we still need the variable
+			tx = None  # In case there's an exception /beginning/ the transaction, we still need the variable
 			try:
 				tx = transaction.begin()
 				if note and note != "Unknown":
-					tx.note( note )
+					tx.note(note)
 				if self.attempts != 1:
-					self.prep_for_retry( number, *args, **kwargs )
+					self.prep_for_retry(number, *args, **kwargs)
 
-				result = self.run_handler( *args, **kwargs )
+				result = self.run_handler(*args, **kwargs)
 
 				# We should still have the same transaction. If we don't,
 				# then we get a ValueError from tx.commit; however, we let this
 				# pass if we would be aborting anyway.
-				#assert transaction.get() is tx, "Started new transaction out from under us!"
+				# assert transaction.get() is tx, "Started new transaction out from under us!"
 
-				if self.should_abort_due_to_no_side_effects( *args, **kwargs ):
+				if self.should_abort_due_to_no_side_effects(*args, **kwargs):
 					# These transactions can safely be aborted and ignored, reducing contention on commit locks
 					# TODO: It would be cool to open them readonly in the first place.
 					# TODO: I don't really know if this is kosher, but it does seem to work so far
 					# NOTE: We raise these as an exception instead of aborting in the loop so that
 					# we don't retry if something goes wrong aborting
-					raise self.AbortException( result, "side-effect free" )
+					raise self.AbortException(result, "side-effect free")
 
-				if tx.isDoomed() or self.should_veto_commit( result, *args, **kwargs ):
-					raise self.AbortException( result, "doomed or vetoed" )
+				if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):
+					raise self.AbortException(result, "doomed or vetoed")
 
 				# note: commit our tx variable, NOT what is current; if they aren't the same, this raises ValueError
-				_do_commit( tx, note, self.long_commit_duration )
+				_do_commit(tx, note, self.long_commit_duration)
 				self.__free(tx); del tx
 				return result
 			except self.AbortException as e:
-				duration = _timing( transaction.abort, 'transaction.abort' )  # note: NOT our tx variable, whatever is current
+				duration = _timing(transaction.abort, 'transaction.abort')  # note: NOT our tx variable, whatever is current
 				self.__free(tx); del tx
-				logger.log( TRACE, "Aborted %s transaction for %s in %ss", e.reason, note, duration )
+				logger.log(TRACE, "Aborted %s transaction for %s in %ss", e.reason, note, duration)
 				return e.response
-			except Exception as e: #pylint:disable=I0011,W0703
+			except Exception as e:  # pylint:disable=I0011,W0703
 				exc_info = orig_excinfo = sys.exc_info()
 				# The code in the transaction package checks the retryable state
 				# BEFORE aborting the current transaction. This matters because
@@ -437,15 +437,15 @@ class TransactionLoop(object):
 				retryable = self._retryable(orig_excinfo)
 
 				try:
-					_timing( transaction.abort, 'transaction.abort' ) # note: NOT our tx variable, whatever is current
+					_timing(transaction.abort, 'transaction.abort')  # note: NOT our tx variable, whatever is current
 					logger.debug("Transaction aborted; retrying %s/%s; '%s'/%r",
 								 retryable, number, e, e)
-				except (AttributeError,ValueError):
+				except (AttributeError, ValueError):
 					try:
 						logger.exception("Failed to abort transaction following exception "
 										 "(retrying %s/%s; '%s'/%r). New exception:",
 										 retryable, number, e, e)
-					except: #pylint:disable=I0011,W0702
+					except:  # pylint:disable=I0011,W0702
 						pass
 					# We've seen RelStorage do this:
 					# relstorage.cache:427 in after_poll: AttributeError: 'int' object has no attribute 'split' which looks like
@@ -462,12 +462,12 @@ class TransactionLoop(object):
 					# `tpc_vote`. (This may happen if the original exception was a ReadConflictError?)
 					# https://github.com/repoze/repoze.sendmail/issues/31 (introduced in 4.2)
 					# Again, no idea what state things are in, so abort with prejudice.
-					try: # pragma: no cover
+					try:  # pragma: no cover
 						from zope.exceptions.exceptionformatter import format_exception
 						fmt = format_exception(*orig_excinfo)
 						logger.warning("Failed to abort transaction following exception. Original exception:\n%s",
 									   '\n'.join(fmt))
-					except: #pylint:disable=I0011,W0702
+					except:  # pylint:disable=I0011,W0702
 						exc_info = sys.exc_info()
 					finally:
 						del orig_excinfo
@@ -485,8 +485,8 @@ class TransactionLoop(object):
 				del exc_info
 				del orig_excinfo
 				if self.sleep:
-					_sleep( self.sleep )
-				#logger.log( TRACE, "Retrying transaction on exception %d", number, exc_info=True )
+					_sleep(self.sleep)
+				# logger.log( TRACE, "Retrying transaction on exception %d", number, exc_info=True )
 			except SystemExit:
 				t, v, tb = sys.exc_info()
 				# If we are exiting, or otherwise probably going to exit, do try
@@ -494,10 +494,10 @@ class TransactionLoop(object):
 				# at this point, though, so don't try to time or log it, just print to stderr on exception.
 				# Be sure to reraise the original SystemExit
 				try:
-					transaction.abort() # note: NOT our tx variable, whatever is current
-				except: #pylint:disable=I0011,W0702
+					transaction.abort()  # note: NOT our tx variable, whatever is current
+				except:  # pylint:disable=I0011,W0702
 					from zope.exceptions.exceptionformatter import print_exception
-					print_exception( *sys.exc_info() )
+					print_exception(*sys.exc_info())
 
 				raise t, v, tb
 
