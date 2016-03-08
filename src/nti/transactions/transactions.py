@@ -23,6 +23,7 @@ from zope import interface
 from ZODB.loglevels import TRACE
 
 import transaction
+
 from transaction.interfaces import TransactionError
 from transaction.interfaces import IDataManagerSavepoint
 from transaction.interfaces import ISavepointDataManager
@@ -36,6 +37,8 @@ except ImportError:  # pragma: no cover # pypy
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
+
+from nti.transactions import DEFAULT_LONG_RUNNING_COMMIT_IN_SECS
 
 @interface.implementer(ISavepointDataManager, IDataManagerSavepoint)
 class ObjectDataManager(object):
@@ -282,7 +285,7 @@ class TransactionLoop(object):
 
 	sleep = None
 	attempts = 10
-	long_commit_duration = 6  # seconds
+	long_commit_duration = DEFAULT_LONG_RUNNING_COMMIT_IN_SECS  # seconds
 
 	#: The default return value from :meth:`should_abort_due_to_no_side_effects`.
 	#: If you are not subclassing, or you do not need access to the arguments
