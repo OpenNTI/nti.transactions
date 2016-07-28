@@ -49,7 +49,6 @@ setup(
         'dm.transaction.aborthook',
         'perfmetrics',
         'transaction',
-        'ZODB',
         'zope.exceptions',
         'zope.interface',
     ],
