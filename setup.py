@@ -27,6 +27,8 @@ setup(
     long_description=_read('README.rst') + _read('CHANGES.rst'),
     license='Apache',
     keywords='ZODB transaction',
+    url='https://github.com/NextThought/nti.transactions',
+    zip_safe=True,
     classifiers=[
         'Intended Audience :: Developers',
         'Natural Language :: English',
