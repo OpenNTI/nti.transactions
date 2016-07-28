@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-VERSION = '0.0.0'
+version = '0.0.0.dev0'
 
 entry_points = {
     'console_scripts': [
@@ -9,32 +9,33 @@ entry_points = {
 }
 
 TESTS_REQUIRE = [
-    'nose',
-    'nose-timer',
-    'nose-pudb',
-    'nose-progressive',
     'nose2[coverage_plugin]',
-    'pyhamcrest',
-    'nti.nose_traceback_info',
-    'nti.testing'
+    'zope.testrunner',
+    'nti.testing',
 ]
+
+def _read(fname):
+    with codecs.open(fname, encoding='UTF-8') as f:
+        return f.read()
 
 setup(
     name='nti.transactions',
-    version=VERSION,
+    version=version,
     author='Jason Madden',
     author_email='jason@nextthought.com',
     description="NTI Transactions Utility",
-    long_description=codecs.open('README.rst', encoding='utf-8').read(),
-    license='Proprietary',
-    keywords='ZODB Transactions',
+    long_description=_read('README.rst'),
+    license='Apache',
+    keywords='ZODB transaction',
     classifiers=[
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'Operating System :: OS Independent',
+        'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: Implementation :: CPython'
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Framework :: ZODB',
     ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
@@ -43,17 +44,15 @@ setup(
     install_requires=[
         'setuptools',
         'dm.transaction.aborthook',
-        'gevent',
         'perfmetrics',
         'transaction',
         'ZODB',
-        'zope.component',
         'zope.exceptions',
         'zope.interface',
-        'zope.security'
     ],
     extras_require={
         'test': TESTS_REQUIRE,
+        'gevent': ['gevent',]
     },
     entry_points=entry_points
 )
