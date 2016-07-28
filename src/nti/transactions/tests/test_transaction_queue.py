@@ -12,13 +12,18 @@ from hamcrest import has_length
 from hamcrest import assert_that
 
 import transaction
+import six
 
 try:
     from gevent.queue import Full
     from gevent.queue import Queue
 except ImportError:
-    from Queue import Full
-    from Queue import Queue
+    if six.PY2:
+        from Queue import Full
+        from Queue import Queue
+    else:
+        from queue import Full
+        from queue import Queue
 
 from nti.transactions.transactions import put_nowait
 
