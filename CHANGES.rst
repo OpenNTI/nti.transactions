@@ -9,3 +9,6 @@ Changes
   ``ZODB.POSException.StorageError`` for unexpected ``TypeErrors``
   during commit, the new class
   ``nti.transactions.interfaces.CommitFailedError`` is raised.
+- Introduce a new subclass of ``TransactionError``,
+  ``AbortFailedError`` that is raised when an abort fails due to a
+  system error.

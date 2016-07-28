@@ -17,3 +17,12 @@ class CommitFailedError(TransactionError):
     This is raised instead of raising very generic system exceptions such as
     TypeError.
     """
+
+class AbortFailedError(TransactionError):
+    """
+    Aborting the active transaction failed for an unknown and unexpected
+    reason.
+
+    This is raised instead of raising very generic system exceptions
+    such as ValueError and AttributeError.
+    """

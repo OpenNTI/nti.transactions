@@ -3,8 +3,8 @@
 """
 Support for working with the :mod:`transaction` module.
 
-This module depends on the :mod:`dm.transaction.aborthook` module
-and directly provides the :func:`add_abort_hooks` function; you should
+This module imports the :mod:`dm.transaction.aborthook` module and
+directly provides the :func:`add_abort_hooks` function; you should
 call this if you need such functionality.
 
 .. $Id$
@@ -21,9 +21,14 @@ import time
 import six
 
 from zope import interface
+from zope.exceptions.exceptionformatter import format_exception
+from zope.exceptions.exceptionformatter import print_exception
+
+
 
 TRACE = 5 # from ZODB.loglevels.
 from .interfaces import CommitFailedError
+from .interfaces import AbortFailedError
 
 import transaction
 
@@ -33,14 +38,16 @@ from transaction.interfaces import ISavepointDataManager
 
 try:
     from gevent import sleep as _sleep
-    from gevent.queue import Full as QFull
-except ImportError:  # pragma: no cover # pypy
-    if six.PY2:
-        from Queue import Full as QFull
-    else:
-        from queue import Full as QFull
-
+except ImportError:
     from time import sleep as _sleep
+
+if six.PY2:
+    # The gevent.queue.Full class is just an alias
+    # for the stdlib class, on both Py2 and Py3
+    from Queue import Full as QFull
+else:
+    from queue import Full as QFull
+
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
@@ -155,12 +162,12 @@ class ObjectDataManager(object):
 
     # No subtransaction support.
     def abort_sub(self, tx):
-        pass  # pragma NO COVERAGE
+        pass  # pragma: no cover
 
     commit_sub = abort_sub
 
     def beforeCompletion(self, tx):
-        pass  # pragma NO COVERAGE
+        pass  # pragma: no cover
 
     afterCompletion = beforeCompletion
 
@@ -221,17 +228,17 @@ def put_nowait(queue, obj):
     """
     transaction.get().join(
         _QueuePutDataManager(queue,
-                              queue.put_nowait,
-                              args=(obj,)))
+                             queue.put_nowait,
+                             args=(obj,)))
 
 def do(*args, **kwargs):
     """
     Establishes a IDataManager in the current transaction.
     See :class:`ObjectDataManager` for the possible arguments.
     """
-    transaction.get().join(
-        ObjectDataManager(*args, **kwargs))
-
+    result = ObjectDataManager(*args, **kwargs)
+    transaction.get().join(result)
+    return result
 
 def _do_commit(tx, description, long_commit_duration):
     exc_info = sys.exc_info()
@@ -278,11 +285,16 @@ class _GONE(object):
         return "<_GONE: This object is gone>"
     __repr__ = __str__
 _GONE = _GONE()
+repr(_GONE) # Coverage
+str(_GONE)
 
 class TransactionLoop(object):
     """
-    Similar to the transaction attempts mechanism, but less error prone and with added logging and
-    hooks. This object is callable and runs its handler in the transaction loop.
+    Similar to the transaction attempts mechanism, but less error
+    prone and with added logging and hooks.
+
+    This object is callable (passing any arguments along to its
+    handle) and runs its handler in the transaction loop.
     """
 
     class AbortException(Exception):
@@ -292,6 +304,8 @@ class TransactionLoop(object):
             self.response = response
             self.reason = reason
 
+    #: If not none, this should be a number that will be passed to
+    #: time.sleep or gevent.sleep in between retries.
     sleep = None
     attempts = 10
     long_commit_duration = DEFAULT_LONG_RUNNING_COMMIT_IN_SECS  # seconds
@@ -338,9 +352,21 @@ class TransactionLoop(object):
         return False
 
     def describe_transaction(self, *args, **kwargs):
+        """
+        Return a note for the transaction.
+
+        This should return a string or None. If it returns a string,
+        that value will be used via ``transaction.note()``
+        """
         return "Unknown"
 
     def run_handler(self, *args, **kwargs):
+        """
+        Actually execute the callable handler.
+
+        This is called from our ``__call__`` method. Subclasses
+        may override to customize how the handler is called.
+        """
         return self.handler(*args, **kwargs)
 
     def __free(self, tx):
@@ -358,12 +384,18 @@ class TransactionLoop(object):
         garbage collection, so we manually clean out the transaction
         object and dispose of these references. After this method runs,
         the transaction object is useless.
-        """
-        if tx is None:
-            return
-        for k in list(tx.__dict__):
-            tx.__dict__[k] = _GONE
 
+        .. note:: This is essentially fixed in transaction 1.6.0
+           https://github.com/zopefoundation/transaction/pull/14
+        """
+        if tx is not None:
+            for k in list(tx.__dict__):
+                tx.__dict__[k] = _GONE
+
+    #: Subclasses can customize this to a sequence of (Type, predicate)
+    #: objects. If the transaction machinery doesn't know that an exception
+    #: is retried, then we check in this list, checking for to see if it is an instance
+    #: and applying the relevant test (which defaults to True)
     _retryable_errors = ()
 
     def _retryable(self, exc_info):
@@ -381,19 +413,59 @@ class TransactionLoop(object):
             retryable = transaction.manager._retryable(t, v)
             if retryable:
                 return retryable
-        except Exception:
+        except Exception: # pragma: no cover
             pass
         else:
             # retryable was false
             for error_type, test in self._retryable_errors:
                 if isinstance(v, error_type):
-                    if test is None:
-                        retryable = True
-                    else:
-                        retryable = test(v)
+                    retryable = True if test is None else test(v)
                     break
             return retryable
 
+    def _abort_on_exception(self, exc_info, retryable, number, tx):
+        e = exc_info[0]
+        try:
+            _timing(transaction.abort, 'transaction.abort')  # note: NOT our tx variable, whatever is current
+            logger.debug("Transaction aborted; retrying %s/%s; '%s'/%r",
+                         retryable, number, e, e)
+        except (AttributeError, ValueError):
+            try:
+                logger.exception("Failed to abort transaction following exception "
+                                 "(retrying %s/%s; '%s'/%r). New exception:",
+                                 retryable, number, e, e)
+            except:  # pylint:disable=I0011,W0702
+                pass
+            # We've seen RelStorage do this:
+            # relstorage.cache:427 in after_poll: AttributeError: 'int' object has no attribute 'split' which looks like
+            # an issue with how it stores checkpoints in memcache.
+            # We have no idea what state it's in after that, so we should
+            # abort.
+
+            # We've seen repoze.sendmail do this:
+            # repoze.sendmail.delivery:119 in abort: ValueError "TPC in progress"
+            # This appears to happen due to some other component raising an exception
+            # after the call to commit has begun, and some exception slips through
+            # such that, instead of calling `tpc_abort`, the stack unwinds.
+            # The sendmail object appears to have been `tpc_begin`, but not
+            # `tpc_vote`. (This may happen if the original exception was a ReadConflictError?)
+            # https://github.com/repoze/repoze.sendmail/issues/31 (introduced in 4.2)
+            # Again, no idea what state things are in, so abort with prejudice.
+            try:
+                if format_exception:
+                    fmt = format_exception(*exc_info)
+                    logger.warning("Failed to abort transaction following exception. Original exception:\n%s",
+                                   '\n'.join(fmt))
+            except:  # pylint:disable=I0011,W0702
+                exc_info = sys.exc_info()
+
+            self.__free(tx); del tx
+
+            try:
+                six.reraise(AbortFailedError, None, exc_info[2])
+            finally:
+                del exc_info
+                del e
 
     def __call__(self, *args, **kwargs):
         # NOTE: We don't handle repoze.tm being in the pipeline
@@ -439,78 +511,45 @@ class TransactionLoop(object):
                 logger.log(TRACE, "Aborted %s transaction for %s in %ss", e.reason, note, duration)
                 return e.response
             except Exception as e:  # pylint:disable=I0011,W0703
-                exc_info = orig_excinfo = sys.exc_info()
+                exc_info = sys.exc_info()
                 # The code in the transaction package checks the retryable state
                 # BEFORE aborting the current transaction. This matters because
                 # aborting the transaction changes the transaction that the manager
                 # has to a new one, and thus changes the set of registered resources
                 # that participate in _retryable, depending on what synchronizers
                 # are registered.
-                retryable = self._retryable(orig_excinfo)
-
-                try:
-                    _timing(transaction.abort, 'transaction.abort')  # note: NOT our tx variable, whatever is current
-                    logger.debug("Transaction aborted; retrying %s/%s; '%s'/%r",
-                                 retryable, number, e, e)
-                except (AttributeError, ValueError):
-                    try:
-                        logger.exception("Failed to abort transaction following exception "
-                                         "(retrying %s/%s; '%s'/%r). New exception:",
-                                         retryable, number, e, e)
-                    except:  # pylint:disable=I0011,W0702
-                        pass
-                    # We've seen RelStorage do this:
-                    # relstorage.cache:427 in after_poll: AttributeError: 'int' object has no attribute 'split' which looks like
-                    # an issue with how it stores checkpoints in memcache.
-                    # We have no idea what state it's in after that, so we should
-                    # abort.
-
-                    # We've seen repoze.sendmail do this:
-                    # repoze.sendmail.delivery:119 in abort: ValueError "TPC in progress"
-                    # This appears to happen due to some other component raising an exception
-                    # after the call to commit has begun, and some exception slips through
-                    # such that, instead of calling `tpc_abort`, the stack unwinds.
-                    # The sendmail object appears to have been `tpc_begin`, but not
-                    # `tpc_vote`. (This may happen if the original exception was a ReadConflictError?)
-                    # https://github.com/repoze/repoze.sendmail/issues/31 (introduced in 4.2)
-                    # Again, no idea what state things are in, so abort with prejudice.
-                    try:  # pragma: no cover
-                        from zope.exceptions.exceptionformatter import format_exception
-                        fmt = format_exception(*orig_excinfo)
-                        logger.warning("Failed to abort transaction following exception. Original exception:\n%s",
-                                       '\n'.join(fmt))
-                    except:  # pylint:disable=I0011,W0702
-                        exc_info = sys.exc_info()
-                    finally:
-                        del orig_excinfo
-                    self.__free(tx); del tx
-
-                    six.reraise(TransactionError, exc_info[1], exc_info[2])
+                retryable = self._retryable(exc_info)
+                self._abort_on_exception(exc_info, retryable, number, tx)
 
                 self.__free(tx); del tx
+                del exc_info
 
-                if number <= 0:
+                if number <= 0: # AFTER the abort
                     raise
 
                 if not retryable:
                     raise
-                del exc_info
-                del orig_excinfo
+
                 if self.sleep:
                     _sleep(self.sleep)
                 # logger.log( TRACE, "Retrying transaction on exception %d", number, exc_info=True )
             except SystemExit:
-                # If we are exiting, or otherwise probably going to exit, do try
-                # to abort the transaction. The state of the system is somewhat undefined
-                # at this point, though, so don't try to time or log it, just print to stderr on exception.
-                # Be sure to reraise the original SystemExit
+                if not sys: # pragma: no cover (module shutdown)
+                    raise
+                # If we are exiting, or otherwise probably going to
+                # exit, do try to abort the transaction. The state of
+                # the system is somewhat undefined at this point,
+                # though, so don't try to time or log it, just print
+                # to stderr on exception. Be sure to reraise the
+                # original SystemExit
+                exc_info = sys.exc_info()
                 try:
                     transaction.abort()  # note: NOT our tx variable, whatever is current
                 except:  # pylint:disable=I0011,W0702
-                    from zope.exceptions.exceptionformatter import print_exception
-                    print_exception(*sys.exc_info())
+                    if print_exception:
+                        print_exception(*sys.exc_info())
 
-                raise
+                six.reraise(*exc_info)
 
 # By default, it wants to create a different logger
 # for each and every thread or greenlet. We go through
