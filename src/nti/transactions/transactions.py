@@ -3,8 +3,8 @@
 """
 Support for working with the :mod:`transaction` module.
 
-This module depends on the :mod:`dm.transaction.aborthook` module
-and directly provides the :func:`add_abort_hooks` function; you should
+This module imports the :mod:`dm.transaction.aborthook` module and
+directly provides the :func:`add_abort_hooks` function; you should
 call this if you need such functionality.
 
 .. $Id$
@@ -38,14 +38,16 @@ from transaction.interfaces import ISavepointDataManager
 
 try:
     from gevent import sleep as _sleep
-    from gevent.queue import Full as QFull
 except ImportError:
-    if six.PY2:
-        from Queue import Full as QFull
-    else:
-        from queue import Full as QFull
-
     from time import sleep as _sleep
+
+if six.PY2:
+    # The gevent.queue.Full class is just an alias
+    # for the stdlib class, on both Py2 and Py3
+    from Queue import Full as QFull
+else:
+    from queue import Full as QFull
+
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
