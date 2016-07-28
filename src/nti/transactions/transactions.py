@@ -22,11 +22,10 @@ import six
 
 from zope import interface
 
-from ZODB.loglevels import TRACE
-from ZODB.POSException import StorageError
+TRACE = 5 # from ZODB.loglevels.
+from .interfaces import CommitFailedError
 
 import transaction
-
 
 from transaction.interfaces import TransactionError
 from transaction.interfaces import IDataManagerSavepoint
@@ -239,23 +238,26 @@ def _do_commit(tx, description, long_commit_duration):
     try:
         duration = _timing(tx.commit, 'transaction.commit')
         logger.log(TRACE, "Committed transaction for %s in %ss", description, duration)
-        if duration > long_commit_duration:  # pragma: no cover
+        if duration > long_commit_duration:
             # We held (or attempted to hold) locks for a really, really, long time. Why?
             logger.warn("Slow running commit for %s in %ss", description, duration)
     except TypeError:
         # Translate this into something meaningful
         exc_info = sys.exc_info()
-        six.reraise(StorageError, exc_info[1], exc_info[2])
-    except (AssertionError, ValueError):  # pragma: no cover
+        six.reraise(CommitFailedError, None, exc_info[2])
+    except (AssertionError, ValueError):
         # We've seen this when we are recalled during retry handling. The higher level
         # is in the process of throwing a different exception and the transaction is
         # already toast, so this commit would never work, but we haven't lost anything;
         # The sad part is that this assertion error overrides the stack trace for what's currently
         # in progress
-        # TODO: Prior to transaction 1.4.0, this was only an AssertionError. 1.4 makes it a ValueError, which is hard to distinguish and might fail retries?
+
+        # TODO: Prior to transaction 1.4.0, this was only an
+        # AssertionError. 1.4 makes it a ValueError, which is hard to
+        # distinguish and might fail retries?
         logger.exception("Failing to commit; should already be an exception in progress")
         if exc_info and exc_info[0]:
-            six.reraise(exc_info[0], None, exc_info[2])
+            six.reraise(*exc_info)
 
         raise
 

@@ -1,0 +1,10 @@
+include *.rst
+include .coveragerc
+include .pylintrc
+include INSTALL
+include LICENSE
+include TODO
+include babel.cfg
+include nose2.cfg
+include tox.ini
+recursive-include src *.zcml *.py
