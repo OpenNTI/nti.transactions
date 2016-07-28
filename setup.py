@@ -26,14 +26,16 @@ setup(
     description="NTI Transactions Utility",
     long_description=_read('README.rst'),
     license='Apache',
-    keywords='ZODB Transactions',
+    keywords='ZODB transaction',
     classifiers=[
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'Operating System :: OS Independent',
+        'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: Implementation :: CPython'
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Framework :: ZODB',
     ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
