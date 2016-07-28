@@ -160,12 +160,12 @@ class ObjectDataManager(object):
 
     # No subtransaction support.
     def abort_sub(self, tx):
-        pass  # pragma NO COVERAGE
+        pass  # pragma: no cover
 
     commit_sub = abort_sub
 
     def beforeCompletion(self, tx):
-        pass  # pragma NO COVERAGE
+        pass  # pragma: no cover
 
     afterCompletion = beforeCompletion
 
@@ -226,17 +226,17 @@ def put_nowait(queue, obj):
     """
     transaction.get().join(
         _QueuePutDataManager(queue,
-                              queue.put_nowait,
-                              args=(obj,)))
+                             queue.put_nowait,
+                             args=(obj,)))
 
 def do(*args, **kwargs):
     """
     Establishes a IDataManager in the current transaction.
     See :class:`ObjectDataManager` for the possible arguments.
     """
-    transaction.get().join(
-        ObjectDataManager(*args, **kwargs))
-
+    result = ObjectDataManager(*args, **kwargs)
+    transaction.get().join(result)
+    return result
 
 def _do_commit(tx, description, long_commit_duration):
     exc_info = sys.exc_info()
