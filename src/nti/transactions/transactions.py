@@ -18,11 +18,15 @@ logger = __import__('logging').getLogger(__name__)
 import sys
 import time
 
+import six
+
 from zope import interface
 
 from ZODB.loglevels import TRACE
+from ZODB.POSException import StorageError
 
 import transaction
+
 
 from transaction.interfaces import TransactionError
 from transaction.interfaces import IDataManagerSavepoint
@@ -32,7 +36,11 @@ try:
     from gevent import sleep as _sleep
     from gevent.queue import Full as QFull
 except ImportError:  # pragma: no cover # pypy
-    from Queue import Full as QFull
+    if six.PY2:
+        from Queue import Full as QFull
+    else:
+        from queue import Full as QFull
+
     from time import sleep as _sleep
 
 from dm.transaction.aborthook import add_abort_hooks
@@ -225,7 +233,6 @@ def do(*args, **kwargs):
     transaction.get().join(
         ObjectDataManager(*args, **kwargs))
 
-from ZODB.POSException import StorageError
 
 def _do_commit(tx, description, long_commit_duration):
     exc_info = sys.exc_info()
@@ -238,7 +245,7 @@ def _do_commit(tx, description, long_commit_duration):
     except TypeError:
         # Translate this into something meaningful
         exc_info = sys.exc_info()
-        raise StorageError, exc_info[1], exc_info[2]
+        six.reraise(StorageError, exc_info[1], exc_info[2])
     except (AssertionError, ValueError):  # pragma: no cover
         # We've seen this when we are recalled during retry handling. The higher level
         # is in the process of throwing a different exception and the transaction is
@@ -248,7 +255,7 @@ def _do_commit(tx, description, long_commit_duration):
         # TODO: Prior to transaction 1.4.0, this was only an AssertionError. 1.4 makes it a ValueError, which is hard to distinguish and might fail retries?
         logger.exception("Failing to commit; should already be an exception in progress")
         if exc_info and exc_info[0]:
-            raise exc_info[0], None, exc_info[2]
+            six.reraise(exc_info[0], None, exc_info[2])
 
         raise
 
@@ -476,7 +483,7 @@ class TransactionLoop(object):
                         del orig_excinfo
                     self.__free(tx); del tx
 
-                    raise TransactionError, exc_info[1], exc_info[2]
+                    six.reraise(TransactionError, exc_info[1], exc_info[2])
 
                 self.__free(tx); del tx
 
@@ -491,7 +498,6 @@ class TransactionLoop(object):
                     _sleep(self.sleep)
                 # logger.log( TRACE, "Retrying transaction on exception %d", number, exc_info=True )
             except SystemExit:
-                t, v, tb = sys.exc_info()
                 # If we are exiting, or otherwise probably going to exit, do try
                 # to abort the transaction. The state of the system is somewhat undefined
                 # at this point, though, so don't try to time or log it, just print to stderr on exception.
@@ -502,7 +508,7 @@ class TransactionLoop(object):
                     from zope.exceptions.exceptionformatter import print_exception
                     print_exception(*sys.exc_info())
 
-                raise t, v, tb
+                raise
 
 # By default, it wants to create a different logger
 # for each and every thread or greenlet. We go through
