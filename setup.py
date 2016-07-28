@@ -42,7 +42,6 @@ setup(
     install_requires=[
         'setuptools',
         'dm.transaction.aborthook',
-        'gevent',
         'perfmetrics',
         'transaction',
         'ZODB',
