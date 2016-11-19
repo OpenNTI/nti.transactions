@@ -44,10 +44,18 @@ except ImportError:
 if six.PY2:
     # The gevent.queue.Full class is just an alias
     # for the stdlib class, on both Py2 and Py3
+    _unicode = unicode
     from Queue import Full as QFull
 else:
+    _unicode = lambda s: s
     from queue import Full as QFull
 
+def to_unicode(s, encoding='utf-8', err='strict'):
+    """
+    Decode a byte sequence and unicode result
+    """
+    s = s.decode(encoding, err) if isinstance(s, bytes) else s
+    return _unicode(s) if s is not None else None
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
@@ -479,7 +487,7 @@ class TransactionLoop(object):
             try:
                 tx = transaction.begin()
                 if note and note != "Unknown":
-                    tx.note(note)
+                    tx.note(to_unicode(note))
                 if self.attempts != 1:
                     self.prep_for_retry(number, *args, **kwargs)
 
