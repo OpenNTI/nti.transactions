@@ -196,6 +196,22 @@ class ObjectDataManager(object):
         # anyway.
         pass
 
+class ExecuteLastObjectDataManager(ObjectDataManager):
+    """
+    A special extension of :class:`ObjectDataManager` that attempts to execute
+    after all other data managers have executed. This is useful when an
+    operation relies on the execution of other data managers.
+    """
+
+    def sortKey(self):
+        """
+        Sort prepended with z's in an attempt to execute after other data
+        managers.
+        """
+        parent_key = super(ExecuteLastObjectDataManager, self).sortKey()
+        sort_str = str(self.target) if self.target is not None else str(self.callable)
+        return 'zzz%s:%s' % (sort_str, parent_key)
+
 class _QueuePutDataManager(ObjectDataManager):
     """
     A data manager that checks if the queue is full before putting.
@@ -234,6 +250,16 @@ def do(*args, **kwargs):
     See :class:`ObjectDataManager` for the possible arguments.
     """
     result = ObjectDataManager(*args, **kwargs)
+    transaction.get().join(result)
+    return result
+
+def do_last(*args, **kwargs):
+    """
+    Establishes a IDataManager in the current transaction that will attempt to
+    execute *after* all other DataManagers have had their say.
+    See :class:`ObjectDataManager` for the possible arguments.
+    """
+    result = ExecuteLastObjectDataManager(*args, **kwargs)
     transaction.get().join(result)
     return result
 
