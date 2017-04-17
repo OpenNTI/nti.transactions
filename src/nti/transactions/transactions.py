@@ -24,8 +24,6 @@ from zope import interface
 from zope.exceptions.exceptionformatter import format_exception
 from zope.exceptions.exceptionformatter import print_exception
 
-
-
 TRACE = 5 # from ZODB.loglevels.
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
@@ -47,7 +45,6 @@ if six.PY2:
     from Queue import Full as QFull
 else:
     from queue import Full as QFull
-
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
@@ -199,6 +196,24 @@ class ObjectDataManager(object):
         # anyway.
         pass
 
+class OrderedNearEndObjectDataManager(ObjectDataManager):
+    """
+    A special extension of :class:`ObjectDataManager` that attempts to execute
+    after all other data managers have executed. This is useful when an
+    operation relies on the execution of other data managers.
+
+    .. versionadded:: 1.1
+    """
+
+    def sortKey(self):
+        """
+        Sort prepended with z's in an attempt to execute after other data
+        managers.
+        """
+        parent_key = super(OrderedNearEndObjectDataManager, self).sortKey()
+        sort_str = str(self.target) if self.target is not None else str(self.callable)
+        return 'zzz%s:%s' % (sort_str, parent_key)
+
 class _QueuePutDataManager(ObjectDataManager):
     """
     A data manager that checks if the queue is full before putting.
@@ -236,9 +251,21 @@ def do(*args, **kwargs):
     Establishes a IDataManager in the current transaction.
     See :class:`ObjectDataManager` for the possible arguments.
     """
-    result = ObjectDataManager(*args, **kwargs)
+    klass = kwargs.pop('datamanager_class', ObjectDataManager)
+    result = klass(*args, **kwargs)
     transaction.get().join(result)
     return result
+
+def do_near_end(*args, **kwargs):
+    """
+    Establishes a IDataManager in the current transaction that will attempt to
+    execute *after* all other DataManagers have had their say.
+    See :class:`ObjectDataManager` for the possible arguments.
+
+    .. versionadded:: 1.1
+    """
+    kwargs['datamanager_class'] = OrderedNearEndObjectDataManager
+    return do(*args, **kwargs)
 
 def _do_commit(tx, description, long_commit_duration):
     exc_info = sys.exc_info()
