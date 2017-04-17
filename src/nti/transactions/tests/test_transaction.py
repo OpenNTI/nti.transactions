@@ -12,17 +12,22 @@ from __future__ import print_function, absolute_import, division
 #pylint: disable=W0212,R0904
 
 import unittest
+
 from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import calling
 from hamcrest import raises
+from hamcrest import contains
 
 import fudge
 
-from ..transactions import _do_commit
-from ..transactions import TransactionLoop
 from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
+
+from ..transactions import do
+from ..transactions import do_near_end
+from ..transactions import _do_commit
+from ..transactions import TransactionLoop
 
 import transaction
 from transaction.interfaces import TransientError
@@ -218,3 +223,19 @@ class TestLoop(unittest.TestCase):
 
         loop = Loop(handler)
         assert_that(calling(loop), raises(AbortFailedError))
+
+class TestDataManagers(unittest.TestCase):
+
+    def test_data_manager_sorting(self):
+        results = []
+        def test_call(x):
+            results.append(x)
+
+        # The managers will execute in order added (since identical),
+        # except for the one that requests to go last.
+        manager1 = do(call=test_call, args=(0,))
+        manager2 = do(call=test_call, args=(1,))
+        manager_post = do_near_end(call=test_call, args=(10,))
+        manager3 = do(call=test_call, args=(2,))
+        transaction.commit()
+        assert_that(results, contains(0, 1, 2, 10))
