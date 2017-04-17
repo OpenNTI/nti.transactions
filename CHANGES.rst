@@ -2,7 +2,7 @@
 Changes
 ========
 
-1.1 (unreleased)
+1.1.0 (2017-04-17)
 ------------------
 
 - Add a new ObjectDataManager that will attempt to execute after
