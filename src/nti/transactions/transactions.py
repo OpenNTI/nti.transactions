@@ -201,6 +201,8 @@ class OrderedNearEndObjectDataManager(ObjectDataManager):
     A special extension of :class:`ObjectDataManager` that attempts to execute
     after all other data managers have executed. This is useful when an
     operation relies on the execution of other data managers.
+
+    .. versionadded:: 1.1
     """
 
     def sortKey(self):
@@ -259,6 +261,8 @@ def do_near_end(*args, **kwargs):
     Establishes a IDataManager in the current transaction that will attempt to
     execute *after* all other DataManagers have had their say.
     See :class:`ObjectDataManager` for the possible arguments.
+
+    .. versionadded:: 1.1
     """
     kwargs['datamanager_class'] = OrderedNearEndObjectDataManager
     return do(*args, **kwargs)

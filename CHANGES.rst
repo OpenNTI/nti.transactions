@@ -2,10 +2,11 @@
 Changes
 ========
 
-1.0.1 (unreleased)
+1.1 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- Add a new ObjectDataManager that will attempt to execute after
+  other ObjectDataManagers.
 
 
 1.0.0 (2016-07-28)
