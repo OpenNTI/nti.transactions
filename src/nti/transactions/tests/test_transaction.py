@@ -21,13 +21,13 @@ from hamcrest import contains
 
 import fudge
 
-from nti.transactions.interfaces import CommitFailedError
-from nti.transactions.interfaces import AbortFailedError
+from ..interfaces import CommitFailedError
+from ..interfaces import AbortFailedError
 
-from nti.transactions.transactions import do
-from nti.transactions.transactions import do_near_end
-from nti.transactions.transactions import _do_commit
-from nti.transactions.transactions import TransactionLoop
+from ..transactions import do
+from ..transactions import do_near_end
+from ..transactions import _do_commit
+from ..transactions import TransactionLoop
 
 import transaction
 from transaction.interfaces import TransientError
@@ -238,4 +238,4 @@ class TestDataManagers(unittest.TestCase):
         manager_post = do_near_end(call=test_call, args=(10,))
         manager3 = do(call=test_call, args=(2,))
         transaction.commit()
-        assert_that(results, contains(0,1,2,10))
+        assert_that(results, contains(0, 1, 2, 10))
