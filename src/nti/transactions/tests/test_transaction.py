@@ -25,7 +25,7 @@ from nti.transactions.interfaces import CommitFailedError
 from nti.transactions.interfaces import AbortFailedError
 
 from nti.transactions.transactions import do
-from nti.transactions.transactions import do_last
+from nti.transactions.transactions import do_near_end
 from nti.transactions.transactions import _do_commit
 from nti.transactions.transactions import TransactionLoop
 
@@ -235,7 +235,7 @@ class TestDataManagers(unittest.TestCase):
         # except for the one that requests to go last.
         manager1 = do(call=test_call, args=(0,))
         manager2 = do(call=test_call, args=(1,))
-        manager_post = do_last(call=test_call, args=(10,))
+        manager_post = do_near_end(call=test_call, args=(10,))
         manager3 = do(call=test_call, args=(2,))
         transaction.commit()
         assert_that(results, contains(0,1,2,10))
