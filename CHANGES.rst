@@ -2,7 +2,7 @@
 Changes
 ========
 
-1.1.1 (unreleased)
+1.1.1 (2018-07-19)
 ------------------
 
 - When the ``TransactionLoop`` raises a ``CommitFailedError`` from a
