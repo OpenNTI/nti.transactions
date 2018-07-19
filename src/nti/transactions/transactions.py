@@ -7,7 +7,6 @@ This module imports the :mod:`dm.transaction.aborthook` module and
 directly provides the :func:`add_abort_hooks` function; you should
 call this if you need such functionality.
 
-.. $Id$
 """
 
 from __future__ import print_function, unicode_literals, absolute_import, division
@@ -278,7 +277,7 @@ def _do_commit(tx, description, long_commit_duration):
     except TypeError:
         # Translate this into something meaningful
         exc_info = sys.exc_info()
-        six.reraise(CommitFailedError, None, exc_info[2])
+        six.reraise(CommitFailedError, CommitFailedError(exc_info[1]), exc_info[2])
     except (AssertionError, ValueError):
         # We've seen this when we are recalled during retry handling. The higher level
         # is in the process of throwing a different exception and the transaction is
@@ -294,6 +293,8 @@ def _do_commit(tx, description, long_commit_duration):
             six.reraise(*exc_info)
 
         raise
+    finally:
+        del exc_info
 
 from perfmetrics import Metric
 
