@@ -5,7 +5,8 @@ Changes
 1.1.1 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- When the ``TransactionLoop`` raises a ``CommitFailedError`` from a
+  ``TypeError``, it preserves the original message.
 
 
 1.1.0 (2017-04-17)

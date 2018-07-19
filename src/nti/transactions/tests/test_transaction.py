@@ -40,12 +40,19 @@ class TestCommit(unittest.TestCase):
 
         def commit(self):
             if self.t:
-                raise self.t()
+                raise self.t
 
-    def test_commit_raises_type_error(self):
+    def test_commit_raises_type_error_raises_commit_failed(self):
         assert_that(calling(_do_commit).with_args(self.RaisingCommit(TypeError),
                                                   '', 0),
                     raises(CommitFailedError))
+
+    def test_commit_raises_type_error_raises_commit_failed_good_message(self):
+        assert_that(calling(_do_commit).with_args(
+            self.RaisingCommit(TypeError("A custom message")),
+            '', 0),
+                    raises(CommitFailedError, "A custom message"))
+
 
     @fudge.patch('nti.transactions.transactions.logger.exception')
     def test_commit_raises_assertion_error(self, fake_logger):
@@ -179,10 +186,14 @@ class TestLoop(unittest.TestCase):
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
-    @fudge.patch('transaction.begin', 'transaction.abort')
-    def test_abort_systemexit(self, fake_begin, fake_abort):
+    @fudge.patch('transaction.begin', 'transaction.abort',
+                 'nti.transactions.transactions.print_exception')
+    def test_abort_systemexit(self, fake_begin, fake_abort, fake_print):
+        from zope.testing.loghandler import Handler
+
         fake_begin.expects_call().returns_fake()
         fake_abort.expects_call().raises(ValueError)
+        fake_print.is_callable()
 
         class Loop(TransactionLoop):
 
