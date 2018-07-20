@@ -2,7 +2,7 @@
 Changes
 ========
 
-2.0.0 (unreleased)
+2.0.0 (2018-07-20)
 ------------------
 
 - Use the new public ``isRetryableError`` in transaction 2.2. The
