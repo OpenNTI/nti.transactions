@@ -16,6 +16,12 @@ logger = __import__('logging').getLogger(__name__)
 
 import sys
 import time
+try:
+    from sys import exc_clear
+except ImportError: # pragma: no cover
+    def exc_clear():
+        "Does nothing"
+        # Python 3 guarantees this natively.
 
 import six
 
@@ -326,6 +332,7 @@ _GONE = _GONE()
 repr(_GONE) # Coverage
 str(_GONE)
 
+
 class TransactionLoop(object):
     """
     Similar to the transaction attempts mechanism, but less error
@@ -460,6 +467,9 @@ class TransactionLoop(object):
                     retryable = True if test is None else test(v)
                     break
             return retryable
+        finally:
+            del exc_info
+            del v
 
     def _abort_on_exception(self, exc_info, retryable, number, tx):
         e = exc_info[0]
@@ -499,21 +509,25 @@ class TransactionLoop(object):
 
             self.__free(tx); del tx
 
-            try:
-                six.reraise(AbortFailedError, None, exc_info[2])
-            finally:
-                del exc_info
-                del e
 
-    def __call__(self, *args, **kwargs): # pylint:disable=too-many-branches
+            six.reraise(AbortFailedError, AbortFailedError(repr(exc_info)), exc_info[2])
+        finally:
+            del exc_info
+            del e
+
+    def __call__(self, *args, **kwargs): # pylint:disable=too-many-branches,too-many-statements
         # NOTE: We don't handle repoze.tm being in the pipeline
 
         number = self.attempts
         note = self.describe_transaction(*args, **kwargs)
-
+        # In case there's an exception /beginning/ the transaction, we still need the variable
+        tx = None
+        exc_info = None
         while number:
             number -= 1
-            tx = None  # In case there's an exception /beginning/ the transaction, we still need the variable
+            # Throw away any previous exceptions our loop raised.
+            # The TB could be taking lots of memory
+            exc_clear()
             try:
                 tx = transaction.begin()
                 if note and note != "Unknown":
@@ -560,7 +574,7 @@ class TransactionLoop(object):
                 self._abort_on_exception(exc_info, retryable, number, tx)
 
                 self.__free(tx); del tx
-                del exc_info
+
 
                 if number <= 0: # AFTER the abort
                     raise
@@ -588,6 +602,8 @@ class TransactionLoop(object):
                         print_exception(*sys.exc_info())
 
                 six.reraise(*exc_info)
+            finally:
+                exc_info = None
 
 # By default, it wants to create a different logger
 # for each and every thread or greenlet. We go through
