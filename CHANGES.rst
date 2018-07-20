@@ -2,11 +2,15 @@
 Changes
 ========
 
-1.1.2 (unreleased)
+2.0.0 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- Use the new public ``isRetryableError`` in transaction 2.2. The
+  interface for this package is unchanged, but a major version bump of
+  a dependency necessitates a major bump here. See `issue 12
+  <https://github.com/NextThought/nti.transactions/issues/12>`_.
 
+- Test support for Python 3.7; remove test support for Python 3.4.
 
 1.1.1 (2018-07-19)
 ------------------
@@ -14,6 +18,7 @@ Changes
 - When the ``TransactionLoop`` raises a ``CommitFailedError`` from a
   ``TypeError``, it preserves the original message.
 
+- Test support for Python 3.6.
 
 1.1.0 (2017-04-17)
 ------------------
