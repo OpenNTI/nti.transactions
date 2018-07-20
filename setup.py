@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-version = '1.1.2.dev0'
+version = '2.0.0.dev0'
 
 entry_points = {
     'console_scripts': [
@@ -36,9 +36,9 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
@@ -52,7 +52,7 @@ setup(
         'setuptools',
         'dm.transaction.aborthook',
         'perfmetrics',
-        'transaction',
+        'transaction >= 2.2.1',
         'zope.exceptions',
         'zope.interface',
     ],

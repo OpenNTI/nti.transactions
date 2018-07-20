@@ -29,7 +29,6 @@ from .interfaces import AbortFailedError
 
 import transaction
 
-from transaction.interfaces import TransactionError
 from transaction.interfaces import IDataManagerSavepoint
 from transaction.interfaces import ISavepointDataManager
 
@@ -38,17 +37,28 @@ try:
 except ImportError:
     from time import sleep as _sleep
 
-if six.PY2:
+try:
+    from queue import Full as QFull
+except ImportError:
+    # Py2
     # The gevent.queue.Full class is just an alias
     # for the stdlib class, on both Py2 and Py3
     from Queue import Full as QFull
-else:
-    from queue import Full as QFull
+
 
 from dm.transaction.aborthook import add_abort_hooks
 add_abort_hooks = add_abort_hooks  # pylint
 
 from nti.transactions import DEFAULT_LONG_RUNNING_COMMIT_IN_SECS
+
+__all__ = [
+    'ObjectDataManager',
+    'OrderedNearEndObjectDataManager',
+    'TransactionLoop',
+    'do',
+    'do_near_end',
+    'put_nowait',
+]
 
 @interface.implementer(ISavepointDataManager, IDataManagerSavepoint)
 class ObjectDataManager(object):
@@ -158,23 +168,23 @@ class ObjectDataManager(object):
 
     # No subtransaction support.
     def abort_sub(self, tx):
-        pass  # pragma: no cover
+        "Does nothing"
 
     commit_sub = abort_sub
 
     def beforeCompletion(self, tx):
-        pass  # pragma: no cover
+        "Does nothing"
 
     afterCompletion = beforeCompletion
 
-    def tpc_begin(self, tx, subtransaction=False):
+    def tpc_begin(self, tx, subtransaction=False): # pylint:disable=unused-argument
         assert not subtransaction
 
-    def tpc_vote(self, tx):
+    def tpc_vote(self, tx): # pylint:disable=unused-argument
         if self.vote:
             self.vote()
 
-    def tpc_finish(self, tx):
+    def tpc_finish(self, tx): # pylint:disable=unused-argument
         self.callable(*self.args, **self.kwargs)
 
     tpc_abort = abort
@@ -362,7 +372,7 @@ class TransactionLoop(object):
         self.AbortException.
         """
 
-    def should_abort_due_to_no_side_effects(self, *args, **kwargs):
+    def should_abort_due_to_no_side_effects(self, *args, **kwargs): # pylint:disable=unused-argument
         """
         Called after the handler has run. If the handler should
         have produced no side effects and the transaction can be aborted
@@ -372,14 +382,14 @@ class TransactionLoop(object):
         """
         return self.side_effect_free
 
-    def should_veto_commit(self, result, *args, **kwargs):
+    def should_veto_commit(self, result, *args, **kwargs): # pylint:disable=unused-argument
         """
         Called after the handler has run. If the result of the handler
         should abort the transaction, return True.
         """
         return False
 
-    def describe_transaction(self, *args, **kwargs):
+    def describe_transaction(self, *args, **kwargs): # pylint:disable=unused-argument
         """
         Return a note for the transaction.
 
@@ -426,7 +436,7 @@ class TransactionLoop(object):
     #: and applying the relevant test (which defaults to True)
     _retryable_errors = ()
 
-    def _retryable(self, exc_info):
+    def _retryable(self, tx, exc_info):
         """
         Should the given exception info be considered one
         we should retry?
@@ -435,13 +445,13 @@ class TransactionLoop(object):
         list of (type, predicate) values we have in this object's
         `_retryable_errors` tuple.
         """
-        t, v = exc_info[:-1]
+        v = exc_info[1]
         retryable = False
         try:
-            retryable = transaction.manager._retryable(t, v)
+            retryable = tx.isRetryableError(v)
             if retryable:
                 return retryable
-        except Exception: # pragma: no cover
+        except Exception: # pylint:disable=broad-except
             pass
         else:
             # retryable was false
@@ -480,7 +490,7 @@ class TransactionLoop(object):
             # https://github.com/repoze/repoze.sendmail/issues/31 (introduced in 4.2)
             # Again, no idea what state things are in, so abort with prejudice.
             try:
-                if format_exception:
+                if format_exception is not None:
                     fmt = format_exception(*exc_info)
                     logger.warning("Failed to abort transaction following exception. Original exception:\n%s",
                                    '\n'.join(fmt))
@@ -495,7 +505,7 @@ class TransactionLoop(object):
                 del exc_info
                 del e
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs): # pylint:disable=too-many-branches
         # NOTE: We don't handle repoze.tm being in the pipeline
 
         number = self.attempts
@@ -546,7 +556,7 @@ class TransactionLoop(object):
                 # has to a new one, and thus changes the set of registered resources
                 # that participate in _retryable, depending on what synchronizers
                 # are registered.
-                retryable = self._retryable(exc_info)
+                retryable = self._retryable(tx, exc_info)
                 self._abort_on_exception(exc_info, retryable, number, tx)
 
                 self.__free(tx); del tx
@@ -574,7 +584,7 @@ class TransactionLoop(object):
                 try:
                     transaction.abort()  # note: NOT our tx variable, whatever is current
                 except:  # pylint:disable=I0011,W0702
-                    if print_exception:
+                    if print_exception is not None:
                         print_exception(*sys.exc_info())
 
                 six.reraise(*exc_info)

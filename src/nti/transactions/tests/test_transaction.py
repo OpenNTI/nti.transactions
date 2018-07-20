@@ -121,6 +121,26 @@ class TestLoop(unittest.TestCase):
         loop = TransactionLoop(handler, sleep=0.01, retries=1)
         assert_that(calling(loop), raises(TransientError))
 
+    def test_non_retryable(self):
+        class MyError(Exception):
+            pass
+        def handler():
+            raise MyError()
+        loop = TransactionLoop(handler, sleep=0.01, retries=100000000)
+        assert_that(calling(loop), raises(MyError))
+
+    def test_isRetryableError_exception(self):
+        # If the transaction.isRetryableError() raises, for some reason,
+        # we still process our list
+        class MyError(object):
+            pass
+        class Loop(TransactionLoop):
+            _retryable_errors = ((MyError, None),)
+
+        loop = Loop(None)
+        loop._retryable(None, (None, MyError(), None))
+
+
     @fudge.patch('transaction.begin', 'transaction.abort')
     def test_note(self, fake_begin, fake_abort):
         (fake_begin.expects_call()
