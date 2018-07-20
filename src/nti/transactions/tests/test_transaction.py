@@ -1,16 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-
-
-.. $Id$
-"""
 
 from __future__ import print_function, absolute_import, division
 
 #disable: accessing protected members, too many methods
 #pylint: disable=W0212,R0904
-
+import sys
 import unittest
 
 from hamcrest import assert_that
@@ -99,6 +94,8 @@ class TestLoop(unittest.TestCase):
 
         calls = []
         def handler():
+            # exc_info should be clear on entry.
+            assert_that(sys.exc_info(), is_((None, None, None)))
             if not calls:
                 calls.append(1)
                 raise exc_type()
@@ -150,7 +147,7 @@ class TestLoop(unittest.TestCase):
         fake_abort.expects_call()
 
         class Loop(TransactionLoop):
-            def describe_transaction(self):
+            def describe_transaction(self, *args, **kwargs):
                 return "Hi"
 
             def _TransactionLoop__free(self, tx):
@@ -196,7 +193,7 @@ class TestLoop(unittest.TestCase):
         fake_abort.expects_call()
 
         class Loop(TransactionLoop):
-            def should_veto_commit(self, result):
+            def should_veto_commit(self, result, *args, **kwargs):
                 assert_that(result, is_(42))
                 return True
 
@@ -209,8 +206,6 @@ class TestLoop(unittest.TestCase):
     @fudge.patch('transaction.begin', 'transaction.abort',
                  'nti.transactions.transactions.print_exception')
     def test_abort_systemexit(self, fake_begin, fake_abort, fake_print):
-        from zope.testing.loghandler import Handler
-
         fake_begin.expects_call().returns_fake()
         fake_abort.expects_call().raises(ValueError)
         fake_print.is_callable()
@@ -264,9 +259,9 @@ class TestDataManagers(unittest.TestCase):
 
         # The managers will execute in order added (since identical),
         # except for the one that requests to go last.
-        manager1 = do(call=test_call, args=(0,))
-        manager2 = do(call=test_call, args=(1,))
-        manager_post = do_near_end(call=test_call, args=(10,))
-        manager3 = do(call=test_call, args=(2,))
+        do(call=test_call, args=(0,))
+        do(call=test_call, args=(1,))
+        do_near_end(call=test_call, args=(10,))
+        do(call=test_call, args=(2,))
         transaction.commit()
         assert_that(results, contains(0, 1, 2, 10))

@@ -12,6 +12,9 @@ Changes
 
 - Test support for Python 3.7; remove test support for Python 3.4.
 
+- ``TransactionLoop`` is more careful to not keep traceback objects
+  around, especially on Python 2.
+
 1.1.1 (2018-07-19)
 ------------------
 
