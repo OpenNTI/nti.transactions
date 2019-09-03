@@ -5,7 +5,8 @@ Changes
 2.0.1 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- Fix compatibility with perfmetrics 3.0: drop ``from __future__
+  import unicode_literals``.
 
 
 2.0.0 (2018-07-20)
