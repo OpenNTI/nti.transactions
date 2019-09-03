@@ -2,7 +2,13 @@
 Changes
 ========
 
-2.0.1 (unreleased)
+2.0.2 (unreleased)
+------------------
+
+- Nothing changed yet.
+
+
+2.0.1 (2019-09-03)
 ------------------
 
 - Fix compatibility with perfmetrics 3.0: drop ``from __future__
