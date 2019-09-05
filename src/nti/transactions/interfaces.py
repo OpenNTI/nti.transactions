@@ -26,3 +26,11 @@ class AbortFailedError(TransactionError):
     This is raised instead of raising very generic system exceptions
     such as ValueError and AttributeError.
     """
+
+class ForeignTransactionError(TransactionError):
+    """
+    Raised when a transaction manager has its transaction changed
+    while a controlling transaction loop believes it is in control.
+
+    This is a programming error.
+    """

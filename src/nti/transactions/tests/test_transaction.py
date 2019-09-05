@@ -13,11 +13,16 @@ from hamcrest import is_
 from hamcrest import calling
 from hamcrest import raises
 from hamcrest import contains
+from hamcrest import has_property
 
 import fudge
 
+from nti.testing.matchers import is_true
+from nti.testing.matchers import is_false
+
 from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
+from ..interfaces import ForeignTransactionError
 
 from ..transactions import do
 from ..transactions import do_near_end
@@ -26,6 +31,8 @@ from ..transactions import TransactionLoop
 
 import transaction
 from transaction.interfaces import TransientError
+from transaction.interfaces import NoTransaction
+from transaction.interfaces import AlreadyInTransaction
 
 
 class TestCommit(unittest.TestCase):
@@ -86,9 +93,44 @@ class TestCommit(unittest.TestCase):
 
 class TestLoop(unittest.TestCase):
 
+    def setUp(self):
+        try:
+            transaction.abort()
+        except NoTransaction:
+            pass
+
     def test_trivial(self):
         result = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)(1)
         assert_that(result, is_(1))
+
+    def test_explicit(self):
+        assert_that(transaction.manager, has_property('explicit', is_false()))
+
+        def handler():
+            assert_that(transaction.manager, has_property('explicit', is_true()))
+            return 42
+
+        result = TransactionLoop(handler)()
+        assert_that(result, is_(42))
+
+    def test_explicit_begin(self):
+        def handler():
+            transaction.begin()
+
+        assert_that(calling(TransactionLoop(handler)), raises(AlreadyInTransaction))
+
+    def test_explicit_end(self):
+        def handler():
+            transaction.abort()
+
+        assert_that(calling(TransactionLoop(handler)), raises(NoTransaction))
+
+    def test_explicit_foreign(self):
+        def handler():
+            transaction.abort()
+            transaction.begin()
+
+        assert_that(calling(TransactionLoop(handler)), raises(ForeignTransactionError))
 
     def test_retriable(self, loop_class=TransactionLoop, exc_type=TransientError):
 
@@ -138,116 +180,105 @@ class TestLoop(unittest.TestCase):
         loop._retryable(None, (None, MyError(), None))
 
 
-    @fudge.patch('transaction.begin', 'transaction.abort')
-    def test_note(self, fake_begin, fake_abort):
-        (fake_begin.expects_call()
-         .returns_fake()
-         .expects('note').with_args("Hi")
-         .provides("isDoomed").returns(True))
-        fake_abort.expects_call()
-
+    @fudge.patch('transaction._manager.TransactionManager.begin',
+                 'transaction._manager.TransactionManager.get')
+    def test_note(self, fake_begin, fake_get):
+        fake_tx = fudge.Fake()
+        (fake_tx
+         .expects('note').with_args(u'Hi')
+         .expects('abort')
+         .provides('isDoomed').returns(True))
+        fake_begin.expects_call().returns(fake_tx)
+        fake_get.expects_call().returns(fake_tx)
         class Loop(TransactionLoop):
             def describe_transaction(self, *args, **kwargs):
-                return "Hi"
-
-            def _TransactionLoop__free(self, tx):
-                pass
+                return u"Hi"
 
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
 
-    @fudge.patch('transaction.begin', 'transaction.abort')
-    def test_abort_no_side_effect(self, fake_begin, fake_abort):
-        fake_begin.expects_call().returns_fake()
-        fake_abort.expects_call()
+    @fudge.patch('transaction._manager.TransactionManager.begin',
+                 'transaction._manager.TransactionManager.get')
+    def test_abort_no_side_effect(self, fake_begin, fake_get):
+        fake_tx = fudge.Fake()
+        fake_tx.expects('abort')
+
+        fake_begin.expects_call().returns(fake_tx)
+        fake_get.expects_call().returns(fake_tx)
+
 
         class Loop(TransactionLoop):
             side_effect_free = True
 
-            def _TransactionLoop__free(self, tx):
-                pass
-
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
-    @fudge.patch('transaction.abort')
+    @fudge.patch('transaction._transaction.Transaction.abort')
     def test_abort_doomed(self, fake_abort):
         fake_abort.expects_call()
 
-        class Loop(TransactionLoop):
-
-            def _TransactionLoop__free(self, tx):
-                pass
-
         def handler():
+            assert_that(transaction.manager.explicit, is_true())
             transaction.get().doom()
             return 42
 
-        result = Loop(handler)()
+        result = TransactionLoop(handler)()
         assert_that(result, is_(42))
 
+    @fudge.patch('transaction._manager.TransactionManager.begin',
+                 'transaction._manager.TransactionManager.get')
+    def test_abort_veto(self, fake_begin, fake_get):
+        fake_tx = fudge.Fake()
+        fake_tx.expects('abort')
+        fake_tx.provides('isDoomed').returns(False)
 
-    @fudge.patch('transaction.abort')
-    def test_abort_veto(self, fake_abort):
-        fake_abort.expects_call()
+        fake_begin.expects_call().returns(fake_tx)
+        fake_get.expects_call().returns(fake_tx)
 
         class Loop(TransactionLoop):
             def should_veto_commit(self, result, *args, **kwargs):
                 assert_that(result, is_(42))
                 return True
 
-            def _TransactionLoop__free(self, tx):
-                pass
-
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
-    @fudge.patch('transaction.begin', 'transaction.abort',
+    @fudge.patch('transaction._manager.TransactionManager.begin',
                  'nti.transactions.transactions.print_exception')
-    def test_abort_systemexit(self, fake_begin, fake_abort, fake_print):
-        fake_begin.expects_call().returns_fake()
-        fake_abort.expects_call().raises(ValueError)
+    def test_abort_systemexit(self, fake_begin, fake_print):
+        fake_tx = fudge.Fake()
+        fake_tx.expects('abort').raises(ValueError)
+        fake_tx.provides('isDoomed').returns(False)
+
+        fake_begin.expects_call().returns(fake_tx)
         fake_print.is_callable()
-
-        class Loop(TransactionLoop):
-
-            def _TransactionLoop__free(self, tx):
-                pass
 
         def handler():
             raise SystemExit()
 
-        loop = Loop(handler)
+        loop = TransactionLoop(handler)
         try:
             loop()
             self.fail("Should raise SystemExit")
         except SystemExit:
             pass
 
-    @fudge.patch('transaction.begin', 'transaction.abort',
+    @fudge.patch('transaction._manager.TransactionManager.begin',
                  'nti.transactions.transactions.logger.exception',
                  'nti.transactions.transactions.logger.warning')
-    def test_abort_exception_raises(self, fake_begin, fake_abort,
+    def test_abort_exception_raises(self, fake_begin,
                                     fake_logger, fake_format):
+        # begin() returns an object without abort(), which we catch.
         fake_begin.expects_call().returns_fake()
-        # aborting itself raises a ValueError, which
-        # gets transformed
-        fake_abort.expects_call().raises(ValueError)
 
         # Likewise for the things we try to do to log it
         fake_logger.expects_call().raises(ValueError)
         fake_format.expects_call().raises(ValueError)
 
-        class Loop(TransactionLoop):
-
-            def _TransactionLoop__free(self, tx):
-                pass
-
         def handler():
             raise Exception()
-
-        loop = Loop(handler)
+        loop = TransactionLoop(handler)
         assert_that(calling(loop), raises(AbortFailedError))
 
 class TestDataManagers(unittest.TestCase):
