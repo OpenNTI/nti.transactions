@@ -52,7 +52,7 @@ setup(
         'setuptools',
         'dm.transaction.aborthook',
         'perfmetrics',
-        'transaction >= 2.2.1',
+        'transaction >= 2.4.0',
         'zope.exceptions',
         'zope.interface',
     ],
