@@ -557,6 +557,7 @@ class TransactionLoop(object):
             return self.__loop(txm, note, args, kwargs)
         finally:
             txm.explicit = was_explicit
+            self.tearDown()
 
     def __loop(self, txm, note, args, kwargs):
         number = self.attempts

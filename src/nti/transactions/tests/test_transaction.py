@@ -132,6 +132,25 @@ class TestLoop(unittest.TestCase):
 
         assert_that(calling(TransactionLoop(handler)), raises(ForeignTransactionError))
 
+    def test_setup_teardown(self):
+
+        class Loop(TransactionLoop):
+            setupcalled = teardowncalled = False
+            def setUp(self):
+                assert_that(transaction.manager, has_property('explicit', is_true()))
+                self.setupcalled = True
+            def tearDown(self):
+                self.teardowncalled = True
+
+        def handler():
+            raise Exception
+
+        loop = Loop(handler)
+        assert_that(calling(loop), raises(Exception))
+
+        assert_that(loop, has_property('setupcalled', is_true()))
+        assert_that(loop, has_property('teardowncalled', is_true()))
+
     def test_retriable(self, loop_class=TransactionLoop, exc_type=TransientError):
 
         calls = []
