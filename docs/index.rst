@@ -8,10 +8,10 @@ Contents:
    changelog
 
 
-.. automodule:: nti.transaction.interfaces
+.. automodule:: nti.transactions.interfaces
     :members:
 
-.. automodule:: nti.transaction.transactions
+.. automodule:: nti.transactions.transactions
     :members:
 
 
