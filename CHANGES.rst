@@ -12,6 +12,10 @@
   ``commit()``. See `issue 20
   <https://github.com/NextThought/nti.transactions/issues/20>`_.
 
+- Move ``transaction.begin()`` out of the block of code that is
+  retried. Previously, an error there would probably be raised
+  *anyway* and not retried, unless a subclass had made customizations.
+
 2.0.1 (2019-09-03)
 ==================
 
