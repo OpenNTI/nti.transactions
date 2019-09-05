@@ -40,7 +40,7 @@ class TestCommit(unittest.TestCase):
         def __init__(self, t=Exception):
             self.t = t
 
-        def commit(self):
+        def nti_commit(self):
             if self.t:
                 raise self.t
 
@@ -186,7 +186,7 @@ class TestLoop(unittest.TestCase):
         fake_tx = fudge.Fake()
         (fake_tx
          .expects('note').with_args(u'Hi')
-         .expects('abort')
+         .expects('nti_abort')
          .provides('isDoomed').returns(True))
         fake_begin.expects_call().returns(fake_tx)
         fake_get.expects_call().returns(fake_tx)
@@ -202,7 +202,7 @@ class TestLoop(unittest.TestCase):
                  'transaction._manager.TransactionManager.get')
     def test_abort_no_side_effect(self, fake_begin, fake_get):
         fake_tx = fudge.Fake()
-        fake_tx.expects('abort')
+        fake_tx.expects('nti_abort')
 
         fake_begin.expects_call().returns(fake_tx)
         fake_get.expects_call().returns(fake_tx)
@@ -214,7 +214,7 @@ class TestLoop(unittest.TestCase):
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
-    @fudge.patch('transaction._transaction.Transaction.abort')
+    @fudge.patch('transaction._transaction.Transaction.nti_abort')
     def test_abort_doomed(self, fake_abort):
         fake_abort.expects_call()
 
@@ -230,7 +230,7 @@ class TestLoop(unittest.TestCase):
                  'transaction._manager.TransactionManager.get')
     def test_abort_veto(self, fake_begin, fake_get):
         fake_tx = fudge.Fake()
-        fake_tx.expects('abort')
+        fake_tx.expects('nti_abort')
         fake_tx.provides('isDoomed').returns(False)
 
         fake_begin.expects_call().returns(fake_tx)
