@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function, absolute_import, division
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 
 #disable: accessing protected members, too many methods
 #pylint: disable=W0212,R0904
@@ -15,17 +17,17 @@ from hamcrest import raises
 from hamcrest import contains
 
 import fudge
-
-from ..interfaces import CommitFailedError
-from ..interfaces import AbortFailedError
-
-from ..transactions import do
-from ..transactions import do_near_end
-from ..transactions import _do_commit
-from ..transactions import TransactionLoop
-
 import transaction
+
 from transaction.interfaces import TransientError
+
+from nti.transactions.interfaces import CommitFailedError
+from nti.transactions.interfaces import AbortFailedError
+
+from nti.transactions.transactions import do
+from nti.transactions.transactions import do_near_end
+from nti.transactions.transactions import _do_commit
+from nti.transactions.transactions import TransactionLoop
 
 
 class TestCommit(unittest.TestCase):
@@ -158,6 +160,32 @@ class TestLoop(unittest.TestCase):
 
 
     @fudge.patch('transaction.begin', 'transaction.abort')
+    def test_begin_failures(self, fake_begin, fake_abort):
+        """
+        Validate we properly retry on error when beginning a transaction.
+        """
+        fake_begin.expects_call().raises(TransientError)
+        fake_abort.expects_call()
+
+        class Loop(TransactionLoop):
+            _retryable_errors = ((Exception, TransientError),)
+            side_effect_free = True
+            _call_count = 0
+
+            def _TransactionLoop__free(self, tx):
+                pass
+
+            def _retryable(self, *args, **kwargs):
+                self._call_count += 1
+                return super(Loop, self)._retryable(*args, **kwargs)
+
+        loop = Loop(lambda: 42)
+
+        assert_that(calling(loop), raises(TransientError))
+        assert_that(loop._call_count, is_(10))
+
+
+    @fudge.patch('transaction.begin', 'transaction.abort')
     def test_abort_no_side_effect(self, fake_begin, fake_abort):
         fake_begin.expects_call().returns_fake()
         fake_abort.expects_call()
@@ -223,6 +251,7 @@ class TestLoop(unittest.TestCase):
             loop()
             self.fail("Should raise SystemExit")
         except SystemExit:
+
             pass
 
     @fudge.patch('transaction.begin', 'transaction.abort',

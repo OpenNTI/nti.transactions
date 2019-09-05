@@ -9,8 +9,9 @@ call this if you need such functionality.
 
 """
 
-from __future__ import print_function, absolute_import, division
-__docformat__ = "restructuredtext en"
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 
 logger = __import__('logging').getLogger(__name__)
 
@@ -455,9 +456,11 @@ class TransactionLoop(object):
         v = exc_info[1]
         retryable = False
         try:
-            retryable = tx.isRetryableError(v)
-            if retryable:
-                return retryable
+            # tx may be None here when we have issues starting the transaction
+            if tx is not None:
+                retryable = tx.isRetryableError(v)
+                if retryable:
+                    return retryable
         except Exception: # pylint:disable=broad-except
             pass
         else:
@@ -517,14 +520,13 @@ class TransactionLoop(object):
 
     def __call__(self, *args, **kwargs): # pylint:disable=too-many-branches,too-many-statements
         # NOTE: We don't handle repoze.tm being in the pipeline
-
         number = self.attempts
         note = self.describe_transaction(*args, **kwargs)
-        # In case there's an exception /beginning/ the transaction, we still need the variable
-        tx = None
         exc_info = None
         while number:
             number -= 1
+            # In case there's an exception /beginning/ the transaction, we still need the variable
+            tx = None
             # Throw away any previous exceptions our loop raised.
             # The TB could be taking lots of memory
             exc_clear()
