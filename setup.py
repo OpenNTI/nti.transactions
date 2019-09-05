@@ -45,7 +45,7 @@ setup(
     ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
-	include_package_data=True,
+    include_package_data=True,
     namespace_packages=['nti'],
     tests_require=TESTS_REQUIRE,
     install_requires=[
@@ -58,7 +58,13 @@ setup(
     ],
     extras_require={
         'test': TESTS_REQUIRE,
-        'gevent': ['gevent',]
+        'gevent': ['gevent',],
+        'docs': [
+            'Sphinx >= 2.1.2',
+            'repoze.sphinx.autointerface',
+            'pyhamcrest',
+            'sphinx_rtd_theme',
+        ],
     },
     entry_points=entry_points
 )

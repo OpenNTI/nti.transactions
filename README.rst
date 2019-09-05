@@ -11,6 +11,10 @@
 .. image:: https://travis-ci.org/NextThought/nti.transactions.svg?branch=master
     :target: https://travis-ci.org/NextThought/nti.transactions
 
+.. image:: https://readthedocs.org/projects/ntitransactions/badge/?version=latest
+   :target: https://ntitransactions.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
 Extensions to the `transaction`_ package.
 
 Transaction Manager

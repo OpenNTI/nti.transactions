@@ -7,4 +7,7 @@ include TODO
 include babel.cfg
 include nose2.cfg
 include tox.ini
+include *.txt
+
+recursive-include docs *.py *.rst
 recursive-include src *.zcml *.py
