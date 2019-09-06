@@ -3,7 +3,7 @@
  Changes
 =========
 
-3.0.0 (unreleased)
+3.0.0 (2019-09-06)
 ==================
 
 - Make ``TransactionLoop`` place its transaction manager in explicit
