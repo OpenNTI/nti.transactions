@@ -14,6 +14,7 @@ from hamcrest import calling
 from hamcrest import raises
 from hamcrest import contains
 from hamcrest import has_property
+from hamcrest import none
 
 import fudge
 
@@ -23,6 +24,7 @@ from nti.testing.matchers import is_false
 from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
 from ..interfaces import ForeignTransactionError
+from ..interfaces import TransactionLifecycleError
 
 from ..transactions import do
 from ..transactions import do_near_end
@@ -119,11 +121,22 @@ class TestLoop(unittest.TestCase):
 
         assert_that(calling(TransactionLoop(handler)), raises(AlreadyInTransaction))
 
+    def test_explicit_begin_after_commit(self):
+        # We change the current transaction out and then still manage to raise
+        # AlreadyInTransaction
+        def handler():
+            transaction.abort()
+            transaction.begin()
+            transaction.begin()
+
+        assert_that(calling(TransactionLoop(handler)), raises(AlreadyInTransaction))
+
+
     def test_explicit_end(self):
         def handler():
             transaction.abort()
 
-        assert_that(calling(TransactionLoop(handler)), raises(NoTransaction))
+        assert_that(calling(TransactionLoop(handler)), raises(TransactionLifecycleError))
 
     def test_explicit_foreign(self):
         def handler():
@@ -131,6 +144,18 @@ class TestLoop(unittest.TestCase):
             transaction.begin()
 
         assert_that(calling(TransactionLoop(handler)), raises(ForeignTransactionError))
+
+    def test_explicit_foreign_abort_fails(self):
+        def bad_abort():
+            raise Exception("Bad abort")
+
+        def handler():
+            transaction.abort()
+            tx = transaction.begin()
+            tx.abort = tx.nti_abort = bad_abort
+
+        assert_that(calling(TransactionLoop(handler)), raises(ForeignTransactionError))
+        assert_that(transaction.manager.manager, has_property('_txn', is_(none())))
 
     def test_setup_teardown(self):
 

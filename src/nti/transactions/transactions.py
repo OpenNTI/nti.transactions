@@ -34,6 +34,7 @@ TRACE = 5 # from ZODB.loglevels.
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
 from .interfaces import ForeignTransactionError
+from .interfaces import TransactionLifecycleError
 
 import transaction
 
@@ -325,6 +326,11 @@ class TransactionLoop(object):
     This object is callable (passing any arguments along to its
     handle) and runs its handler in the transaction loop.
 
+    The handler code may doom the transaction, but they must not
+    attempt to commit or abort it. A doomed transaction, or one whose
+    commit is vetoed by :meth:`should_abort_due_to_no_side_effects`
+    or :meth:`should_veto_commit` is never retried.
+
     .. versionchanged:: 3.0
 
        When this object is called, the thread-local default or global
@@ -336,7 +342,7 @@ class TransactionLoop(object):
        If the application begins, commits or aborts the transaction, it can expect this
        object to raise `transaction.interfaces.NoTransaction`,
        `transaction.interfaces.AlreadyInTransaction`
-       or `nti.transactions.interfaces.ForeignTransactionError`.
+       or `nti.transactions.interfaces.TransactionLifecycleError`.
     """
 
     class AbortAndReturn(Exception):
@@ -559,7 +565,7 @@ class TransactionLoop(object):
             txm.explicit = was_explicit
             self.tearDown()
 
-    def __loop(self, txm, note, args, kwargs):
+    def __loop(self, txm, note, args, kwargs): # pylint:disable=too-many-branches
         number = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
@@ -579,23 +585,31 @@ class TransactionLoop(object):
 
                 result = self.run_handler(*args, **kwargs)
 
-                # This will raise NoTransaction if we're not in a transaction because the
-                # application called commit() or abort();
-                # a previous call to begin() to change the transaction would have raised
+                # If the application called commit() or abort(), this will return None
+                # A previous call to begin() to change the transaction would have raised
                 # AlreadyInTransaction if the application hadn't committed or aborted
                 # the transaction, which it should not of course be doing. If we don't check
                 # this, then committing the transaction will raise a ValueError
                 # from the TransactionManager: ValueError("Foreign transaction") which
                 # happens *after* the transaction object has committed; not good.
                 # Raise the error now so we can abort the proper object.
-                if tx is not txm.get():
+                current_tx = self.__has_current_transaction(txm)
+                if current_tx is None:
+                    tx = None
+                    raise TransactionLifecycleError(
+                        "The handler aborted or committed one or many transactions "
+                        "and did not begin another one. Handlers must not perform "
+                        "transaction lifecycle operations."
+                    )
+                if tx is not current_tx:
                     # Note that we don't handle the NoTransaction case, because
                     # we have no way of knowing whether the transaction was committed
                     # or aborted. Safer just to require the application not to manage
                     # its own transaction.
                     raise ForeignTransactionError(
                         "Transaction currently in progress is not the one the "
-                        "loop began. It must have been committed and a new one started."
+                        "loop began. It must have been committed and a new one started. "
+                        "Handlers must not perform transaction lifecycle operations."
                     )
 
                 if self.should_abort_due_to_no_side_effects(*args, **kwargs):
@@ -616,24 +630,48 @@ class TransactionLoop(object):
                 _do_commit(tx, note, self.long_commit_duration)
 
                 return result
+            except ForeignTransactionError:
+                # They left a transaction hanging around. If it's
+                # still ACTIVE, we need to abort it, and clean up
+                # after ourself if that fails, pending
+                # https://github.com/zopefoundation/transaction/pull/84
+                # This could raise lots of exceptions, including
+                # ValueError(foreign transaction). We want to raise the FTE,
+                # not an AbortFailedError.
+
+                # Our current transaction, by definition, has already been
+                # successfully committed or aborted. We only need to worry about
+                # the new one, which is in an undetermined state.
+                self.__abort_current_transaction_quietly(txm)
+                raise
+
+            except (
+                    # Programming error: The application called
+                    # commit() or abort() and then used transaction.get() (not us, we must
+                    # never use an unguarded transaction.get()). The application
+                    # should not call commit() or abort() and must be
+                    # fixed. The good new is there's nothing to abort: by definition,
+                    # our current transaction has been moved past.
+                    NoTransaction,
+                    # Programming error: The application called commit() or abort(),
+                    # and we discovered that there was no active transaction.
+                    # The good news is there's nothing to abort, as in the above.
+                    TransactionLifecycleError
+            ):
+                raise
             except (
                     # Programming error: the application called begin() again.
                     # This should be fixed.
-                    # Aborting isn't wise, the system is in a bad state.
+                    # The current transaction could still be our initial
+                    # transaction, or it could be something else if they also had
+                    # one of the other errors, so we have up to two transactions to
+                    # to abort.
                     AlreadyInTransaction,
-                    # Programming error: The application called commit() or abort()
-                    # and then someone used transaction.get(). The application should not
-                    # call commit() or abort() and must be fixed.
-                    # Attempting to abort isn't wise, the system is in a bad state.
-                    NoTransaction,
-                    # Programming error. We raise this when we detect
-                    # the application called commit/abort and begin() underneath
-                    # us. The application must be fixed. Aborting our tx variable will
-                    # wind up raising a ValueError.
-                    ForeignTransactionError
             ):
-                # XXX: If https://github.com/zopefoundation/transaction/pull/84
-                # gets in, then aborting should be safe.
+                current_tx = txm.get()
+                self.__abort_current_transaction_quietly(txm)
+                if current_tx is not tx:
+                    self.__abort_transaction_quietly(tx)
                 raise
             except self.AbortAndReturn as e:
                 tx.nti_abort()
@@ -642,6 +680,30 @@ class TransactionLoop(object):
                 self.__handle_generic_exception(tx, number)
             except SystemExit:
                 self.__handle_exit(tx)
+
+
+    def __abort_current_transaction_quietly(self, txm):
+        self.__abort_transaction_quietly(txm)
+        # Ensure we're in a clean state
+        # even if abort failed.
+        txm._txn = None
+
+    @staticmethod
+    def __abort_transaction_quietly(tx):
+        try:
+            tx.abort()
+        except Exception: # Ignore. pylint:disable=broad-except
+            pass
+
+
+    @staticmethod
+    def __has_current_transaction(txm):
+        # Handles an explicit transaction manager raising an exception
+        # when it doesn't have a transaction.
+        try:
+            return txm.get()
+        except NoTransaction:
+            return None
 
     def __handle_generic_exception(self, tx, attempts_remaining, _reraise=six.reraise):
         # The code in the transaction package checks the retryable state
