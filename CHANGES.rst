@@ -16,6 +16,12 @@
   retried. Previously, an error there would probably be raised
   *anyway* and not retried, unless a subclass had made customizations.
 
+- Add ``setUp`` and ``tearDown`` methods to TransactionLoop to give
+  subclasses a place to hook into the inners of the transaction loop.
+  This is particularly helpful if they need to do something after the
+  transaction manager has been put in explicit mode. See `issue 22
+  <https://github.com/NextThought/nti.transactions/issues/22>`_.
+
 2.0.1 (2019-09-03)
 ==================
 

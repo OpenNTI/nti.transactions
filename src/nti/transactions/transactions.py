@@ -34,6 +34,7 @@ TRACE = 5 # from ZODB.loglevels.
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
 from .interfaces import ForeignTransactionError
+from .interfaces import TransactionLifecycleError
 
 import transaction
 
@@ -286,11 +287,12 @@ def do_near_end(*args, **kwargs):
     kwargs['datamanager_class'] = OrderedNearEndObjectDataManager
     return do(*args, **kwargs)
 
-def _do_commit(tx, description, long_commit_duration):
+def _do_commit(tx, description, long_commit_duration, perf_counter=time.time):
     exc_info = sys.exc_info()
     try:
-        duration = _timing(tx.commit, 'transaction.commit')
-        logger.log(TRACE, "Committed transaction for %s in %ss", description, duration)
+        begin = perf_counter()
+        tx.nti_commit()
+        duration = perf_counter() - begin
         if duration > long_commit_duration:
             # We held (or attempted to hold) locks for a really, really, long time. Why?
             logger.warn("Slow running commit for %s in %ss", description, duration)
@@ -316,17 +318,6 @@ def _do_commit(tx, description, long_commit_duration):
     finally:
         del exc_info
 
-
-def _timing(operation, name):
-    """
-    Run the `operation` callable, returning the number of seconds it took.
-    """
-    now = time.time()
-    with Metric(name):
-        operation()
-    done = time.time()
-    return done - now
-
 class TransactionLoop(object):
     """
     Similar to the transaction attempts mechanism, but less error
@@ -334,6 +325,11 @@ class TransactionLoop(object):
 
     This object is callable (passing any arguments along to its
     handle) and runs its handler in the transaction loop.
+
+    The handler code may doom the transaction, but they must not
+    attempt to commit or abort it. A doomed transaction, or one whose
+    commit is vetoed by :meth:`should_abort_due_to_no_side_effects`
+    or :meth:`should_veto_commit` is never retried.
 
     .. versionchanged:: 3.0
 
@@ -346,7 +342,7 @@ class TransactionLoop(object):
        If the application begins, commits or aborts the transaction, it can expect this
        object to raise `transaction.interfaces.NoTransaction`,
        `transaction.interfaces.AlreadyInTransaction`
-       or `nti.transactions.interfaces.ForeignTransactionError`.
+       or `nti.transactions.interfaces.TransactionLifecycleError`.
     """
 
     class AbortAndReturn(Exception):
@@ -394,7 +390,10 @@ class TransactionLoop(object):
         Called just after a transaction begins if there will be
         more than one attempt possible. Do any preparation
         needed to cleanup or prepare reattempts, or raise
-        self.AbortException.
+        :class:`AbortAndReturn` if that's not possible.
+
+        :param int number: How many attempts remain. Will always be
+          at least 1.
         """
 
     def should_abort_due_to_no_side_effects(self, *args, **kwargs): # pylint:disable=unused-argument
@@ -414,6 +413,8 @@ class TransactionLoop(object):
         """
         return False
 
+    _UNUSED_DESCRIPTION = 'Unknown'
+
     def describe_transaction(self, *args, **kwargs): # pylint:disable=unused-argument
         """
         Return a note for the transaction.
@@ -421,7 +422,7 @@ class TransactionLoop(object):
         This should return a string or None. If it returns a string,
         that value will be used via ``transaction.note()``
         """
-        return "Unknown"
+        return self._UNUSED_DESCRIPTION
 
     def run_handler(self, *args, **kwargs):
         """
@@ -469,7 +470,7 @@ class TransactionLoop(object):
     def _abort_on_exception(self, exc_info, retryable, number, tx):
         e = exc_info[0]
         try:
-            _timing(tx.abort, 'transaction.abort')
+            tx.nti_abort()
             logger.debug("Transaction aborted; retrying %s/%s; '%s'/%r",
                          retryable, number, e, e)
         except (AttributeError, ValueError):
@@ -507,12 +508,45 @@ class TransactionLoop(object):
             del exc_info
             del e
 
-    def __call__(self, *args, **kwargs): # pylint:disable=too-many-branches,too-many-statements
-        number = self.attempts
+    @staticmethod
+    def setUp():
+        """
+        Called by `__call__` before making any attempts or beginning
+        any transaction.
+
+        When this method is called, it is guaranteed that ``transaction.manager.explicit``
+        is true.
+
+        Subclasses may override this method. If they are not a direct subclass
+        of this class, they should be sure to call the `super` implementation; it
+        is not necessary to call this implementation.
+
+        .. versionadded:: 3.0
+        """
+
+
+    @staticmethod
+    def tearDown():
+        """
+        Called by :meth:`__call__` just before returning, in all cases,
+        once ``setUp`` has been called.
+
+        When this method is called, it is guaranteed that ``transaction.manager.explicit``
+        is at its original value.
+
+        Subclasses may override this method. If they are not a direct subclass
+        of this class, they should be sure to call the `super` implementation; it
+        is not necessary to call this implementation.
+
+        If this method raises an exception, the original return value of the handler,
+        or its exception, will be lost.
+
+        .. versionadded:: 3.0
+        """
+
+    def __call__(self, *args, **kwargs):
         note = self.describe_transaction(*args, **kwargs)
-        # In case there's an exception /beginning/ the transaction, we still need the variable
-        tx = None
-        exc_info = None
+
         # We use the thread-local global/default transaction manager.
         # Accessing it directly is a bit faster than going through the wrapping
         # layer. Applications should not be changing it.
@@ -523,129 +557,215 @@ class TransactionLoop(object):
         # our local Transaction object and the global state.
         was_explicit = txm.explicit
         txm.explicit = True
+
         try:
-
-            while number:
-                number -= 1
-                # Throw away any previous exceptions our loop raised.
-                # The TB could be taking lots of memory
-                exc_clear()
-                tx = txm.begin()
-                if note and note != "Unknown":
-                    tx.note(note)
-
-                try:
-                    if self.attempts != 1:
-                        self.prep_for_retry(number, *args, **kwargs)
-
-                    result = self.run_handler(*args, **kwargs)
-
-                    # This will raise NoTransaction if we're not in a transaction because the
-                    # application called commit() or abort();
-                    # a previous call to begin() to change the transaction would have raised
-                    # AlreadyInTransaction if the application hadn't committed or aborted
-                    # the transaction, which it should not of course be doing. If we don't check
-                    # this, then committing the transaction will raise a ValueError
-                    # from the TransactionManager: ValueError("Foreign transaction") which
-                    # happens *after* the transaction object has committed; not good.
-                    # Raise the error now so we can abort the proper object.
-                    if tx is not txm.get():
-                        # Note that we don't handle the NoTransaction case, because
-                        # we have no way of knowing whether the transaction was committed
-                        # or aborted. Safer just to require the application not to manage
-                        # its own transaction.
-                        raise ForeignTransactionError(
-                            "Transaction currently in progress is not the one the "
-                            "loop began. It must have been committed and a new one started."
-                        )
-
-                    if self.should_abort_due_to_no_side_effects(*args, **kwargs):
-                        # These transactions can safely be aborted and
-                        # ignored, reducing contention on commit
-                        # locks, if any resources had actually been
-                        # joined (ZODB Connection only joins when it
-                        # detects a write).
-
-                        # NOTE: We raise these as an exception instead
-                        # of aborting in the loop so that we don't
-                        # retry if something goes wrong aborting
-                        raise self.AbortAndReturn(result, "side-effect free")
-
-                    if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):
-                        raise self.AbortAndReturn(result, "doomed or vetoed")
-
-                    _do_commit(tx, note, self.long_commit_duration)
-
-                    return result
-                except AlreadyInTransaction:
-                    # Programming error: the application called begin() again.
-                    # This should be fixed.
-                    # Aborting isn't wise, the system is in a bad state.
-                    # XXX: If https://github.com/zopefoundation/transaction/pull/84
-                    # gets in, then aborting should be safe.
-                    raise
-                except NoTransaction:
-                    # Programming error: The application called commit() or abort()
-                    # and then someone used transaction.get(). The application should not
-                    # call commit() or abort() and must be fixed.
-                    # Attempting to abort isn't wise, the system is in a bad state.
-                    raise
-                except ForeignTransactionError:
-                    # Programming error. We raise this when we detect
-                    # the application called commit/abort and begin() underneath
-                    # us. The application must be fixed. Aborting our tx variable will
-                    # wind up raising a ValueError.
-                    raise
-                except self.AbortAndReturn as e:
-                    duration = _timing(tx.abort, 'transaction.abort')
-                    logger.log(TRACE, "Aborted %s transaction for %s in %ss",
-                               e.reason, note, duration)
-                    return e.response
-                except Exception as e: # pylint:disable=broad-except
-                    exc_info = sys.exc_info()
-                    # The code in the transaction package checks the retryable state
-                    # BEFORE aborting the current transaction. This matters because
-                    # aborting the transaction changes the transaction that the manager
-                    # has to a new one, and thus changes the set of registered resources
-                    # that participate in _retryable, depending on what synchronizers
-                    # are registered.
-                    retryable = self._retryable(tx, exc_info)
-                    self._abort_on_exception(exc_info, retryable, number, tx)
-
-                    if number <= 0: # AFTER the abort
-                        raise
-
-                    if not retryable:
-                        raise
-
-                    if self.sleep:
-                        _sleep(self.sleep)
-
-                except SystemExit:
-                    if not sys: # pragma: no cover (module shutdown)
-                        raise
-                    # If we are exiting, or otherwise probably going to
-                    # exit, do try to abort the transaction. The state of
-                    # the system is somewhat undefined at this point,
-                    # though, so don't try to time or log it, just print
-                    # to stderr on exception. Be sure to reraise the
-                    # original SystemExit
-                    exc_info = sys.exc_info()
-                    try:
-                        tx.abort()
-                    except:  # pylint:disable=I0011,W0702
-                        if print_exception is not None:
-                            print_exception(*sys.exc_info())
-
-                    six.reraise(*exc_info)
-                finally:
-                    exc_info = None
-                    tx = None
+            self.setUp()
+            return self.__loop(txm, note, args, kwargs)
         finally:
             txm.explicit = was_explicit
+            self.tearDown()
+
+    def __loop(self, txm, note, args, kwargs): # pylint:disable=too-many-branches
+        number = self.attempts
+        need_retry = self.attempts > 1
+        begin = txm.begin
+        unused_descr = self._UNUSED_DESCRIPTION
+        while number:
+            number -= 1
+            # Throw away any previous exceptions our loop raised.
+            # The TB could be taking lots of memory
+            exc_clear()
+            tx = begin()
+            if note and note is not unused_descr:
+                tx.note(note)
+
+            try:
+                if need_retry:
+                    self.prep_for_retry(number, *args, **kwargs)
+
+                result = self.run_handler(*args, **kwargs)
+
+                # If the application called commit() or abort(), this will return None
+                # A previous call to begin() to change the transaction would have raised
+                # AlreadyInTransaction if the application hadn't committed or aborted
+                # the transaction, which it should not of course be doing. If we don't check
+                # this, then committing the transaction will raise a ValueError
+                # from the TransactionManager: ValueError("Foreign transaction") which
+                # happens *after* the transaction object has committed; not good.
+                # Raise the error now so we can abort the proper object.
+                current_tx = self.__has_current_transaction(txm)
+                if current_tx is None:
+                    tx = None
+                    raise TransactionLifecycleError(
+                        "The handler aborted or committed one or many transactions "
+                        "and did not begin another one. Handlers must not perform "
+                        "transaction lifecycle operations."
+                    )
+                if tx is not current_tx:
+                    # Note that we don't handle the NoTransaction case, because
+                    # we have no way of knowing whether the transaction was committed
+                    # or aborted. Safer just to require the application not to manage
+                    # its own transaction.
+                    raise ForeignTransactionError(
+                        "Transaction currently in progress is not the one the "
+                        "loop began. It must have been committed and a new one started. "
+                        "Handlers must not perform transaction lifecycle operations."
+                    )
+
+                if self.should_abort_due_to_no_side_effects(*args, **kwargs):
+                    # These transactions can safely be aborted and
+                    # ignored, reducing contention on commit
+                    # locks, if any resources had actually been
+                    # joined (ZODB Connection only joins when it
+                    # detects a write).
+
+                    # NOTE: We raise these as an exception instead
+                    # of aborting in the loop so that we don't
+                    # retry if something goes wrong aborting
+                    raise self.AbortAndReturn(result, "side-effect free")
+
+                if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):
+                    raise self.AbortAndReturn(result, "doomed or vetoed")
+
+                _do_commit(tx, note, self.long_commit_duration)
+
+                return result
+            except ForeignTransactionError:
+                # They left a transaction hanging around. If it's
+                # still ACTIVE, we need to abort it, and clean up
+                # after ourself if that fails, pending
+                # https://github.com/zopefoundation/transaction/pull/84
+                # This could raise lots of exceptions, including
+                # ValueError(foreign transaction). We want to raise the FTE,
+                # not an AbortFailedError.
+
+                # Our current transaction, by definition, has already been
+                # successfully committed or aborted. We only need to worry about
+                # the new one, which is in an undetermined state.
+                self.__abort_current_transaction_quietly(txm)
+                raise
+
+            except (
+                    # Programming error: The application called
+                    # commit() or abort() and then used transaction.get() (not us, we must
+                    # never use an unguarded transaction.get()). The application
+                    # should not call commit() or abort() and must be
+                    # fixed. The good new is there's nothing to abort: by definition,
+                    # our current transaction has been moved past.
+                    NoTransaction,
+                    # Programming error: The application called commit() or abort(),
+                    # and we discovered that there was no active transaction.
+                    # The good news is there's nothing to abort, as in the above.
+                    TransactionLifecycleError
+            ):
+                raise
+            except (
+                    # Programming error: the application called begin() again.
+                    # This should be fixed.
+                    # The current transaction could still be our initial
+                    # transaction, or it could be something else if they also had
+                    # one of the other errors, so we have up to two transactions to
+                    # to abort.
+                    AlreadyInTransaction,
+            ):
+                current_tx = txm.get()
+                self.__abort_current_transaction_quietly(txm)
+                if current_tx is not tx:
+                    self.__abort_transaction_quietly(tx)
+                raise
+            except self.AbortAndReturn as e:
+                tx.nti_abort()
+                return e.response
+            except Exception: # pylint:disable=broad-except
+                self.__handle_generic_exception(tx, number)
+            except SystemExit:
+                self.__handle_exit(tx)
+
+
+    def __abort_current_transaction_quietly(self, txm):
+        self.__abort_transaction_quietly(txm)
+        # Ensure we're in a clean state
+        # even if abort failed.
+        txm._txn = None
+
+    @staticmethod
+    def __abort_transaction_quietly(tx):
+        try:
+            tx.abort()
+        except Exception: # Ignore. pylint:disable=broad-except
+            pass
+
+
+    @staticmethod
+    def __has_current_transaction(txm):
+        # Handles an explicit transaction manager raising an exception
+        # when it doesn't have a transaction.
+        try:
+            return txm.get()
+        except NoTransaction:
+            return None
+
+    def __handle_generic_exception(self, tx, attempts_remaining, _reraise=six.reraise):
+        # The code in the transaction package checks the retryable state
+        # BEFORE aborting the current transaction. This matters because
+        # aborting the transaction changes the transaction that the manager
+        # has to a new one, and thus changes the set of registered resources
+        # that participate in _retryable, depending on what synchronizers
+        # are registered.
+        exc_info = sys.exc_info()
+        try:
+            retryable = self._retryable(tx, exc_info)
+            self._abort_on_exception(exc_info, retryable, attempts_remaining, tx)
+
+            if attempts_remaining <= 0 or not retryable: # AFTER the abort
+                _reraise(*exc_info)
+        finally:
+            exc_info = None
+
+        if self.sleep:
+            _sleep(self.sleep)
+
+    def __handle_exit(self, tx, _reraise=six.reraise, _exc_info=sys.exc_info):
+        # If we are exiting, or otherwise probably going to
+        # exit, do try to abort the transaction. The state of
+        # the system is somewhat undefined at this point,
+        # though, so don't try to time or log it, just print
+        # to stderr on exception. Be sure to reraise the
+        # original SystemExit
+        exc_info = _exc_info()
+        try:
+            try:
+                tx.abort()
+            except: # pylint:disable=bare-except
+                if print_exception is not None:
+                    print_exception(*_exc_info())
+
+            _reraise(*exc_info)
+        finally:
+            exc_info = None
+
+###
+# Monkey-patches
+###
 
 # By default, it wants to create a different logger
 # for each and every thread or greenlet. We go through
 # lots of greenlets, so that's lots of loggers
 from transaction import _transaction
 _transaction._LOGGER = __import__('logging').getLogger('txn.GLOBAL')
+
+# Introduce a 'nti_abort' function that wraps the raw abort as a metric.
+raw_abort = _transaction.Transaction.abort
+if hasattr(raw_abort, 'im_func'):
+    # Py2
+    raw_abort = raw_abort.im_func
+_transaction.Transaction.nti_abort = Metric('transaction.abort', rate=0.1)(raw_abort)
+del raw_abort
+
+# Ditto for commit
+raw_commit = _transaction.Transaction.commit
+if hasattr(raw_commit, 'im_func'):
+    # Py2
+    raw_commit = raw_commit.im_func
+_transaction.Transaction.nti_commit = Metric('transaction.commit', rate=0.1)(raw_commit)
+del raw_commit

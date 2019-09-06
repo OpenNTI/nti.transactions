@@ -27,10 +27,28 @@ class AbortFailedError(TransactionError):
     such as ValueError and AttributeError.
     """
 
-class ForeignTransactionError(TransactionError):
+class TransactionLifecycleError(TransactionError):
+    """
+    Raised when an application commits or aborts a transaction
+    while the transaction controller believes it is in control.
+
+    *Applications must not raise this exception.*
+
+    This may have happened many times; we cannot detect that.
+
+    This is a programming error.
+    """
+
+class ForeignTransactionError(TransactionLifecycleError):
     """
     Raised when a transaction manager has its transaction changed
     while a controlling transaction loop believes it is in control.
+
+    The handler first aborted or committed the transaction, and then
+    began a new one. Possibly many times.
+
+    A kind of `TransactionLifecycleError`. *Applications must not
+    raise this exception.*
 
     This is a programming error.
     """
