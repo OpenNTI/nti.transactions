@@ -10,8 +10,6 @@ __docformat__ = "restructuredtext en"
 from hamcrest import is_
 from hamcrest import has_length
 from hamcrest import assert_that
-from hamcrest import calling
-from hamcrest import raises
 
 import transaction
 import six
@@ -27,8 +25,7 @@ except ImportError:
         from queue import Full
         from queue import Queue
 
-from ..transactions import put_nowait
-from ..transactions import do
+from ..queue import put_nowait
 
 from nti.testing.base import AbstractTestBase
 
@@ -112,23 +109,3 @@ class PutQueueTest(AbstractTestBase):
 
         assert_that(cm.exception, is_(Full))
         assert_that(queue.get(block=False), is_(object))
-
-class TestObjectDataManager(AbstractTestBase):
-
-    def test_vote(self):
-        class Exc(Exception):
-            pass
-        def vote():
-            raise Exc()
-
-        odm = do(call=lambda: 1, vote=vote)
-        assert_that(calling(odm.tpc_vote).with_args(None), raises(Exc))
-
-    def test_callable_name(self):
-        class X(object):
-            def thing(self):
-                pass
-
-        x = X()
-        odm = do(target=x, method_name='thing')
-        assert_that(odm.callable, is_(x.thing))

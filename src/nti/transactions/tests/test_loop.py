@@ -84,7 +84,7 @@ class TestCommit(unittest.TestCase):
                                                       '', 0),
                         raises(MyException))
 
-    @fudge.patch('nti.transactions.transactions.logger.warn')
+    @fudge.patch('nti.transactions.loop.logger.warn')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
         _do_commit(self.RaisingCommit(None), '', 0)
