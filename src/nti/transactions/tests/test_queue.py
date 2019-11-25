@@ -10,8 +10,6 @@ __docformat__ = "restructuredtext en"
 from hamcrest import is_
 from hamcrest import has_length
 from hamcrest import assert_that
-from hamcrest import calling
-from hamcrest import raises
 
 import transaction
 import six
@@ -27,8 +25,7 @@ except ImportError:
         from queue import Full
         from queue import Queue
 
-from ..transactions import put_nowait
-from ..transactions import do
+from ..queue import put_nowait
 
 from nti.testing.base import AbstractTestBase
 
@@ -38,36 +35,36 @@ class PutQueueTest(AbstractTestBase):
         queue = Queue() # unbounded
         transaction.begin()
 
-        put_nowait( queue, self )
+        put_nowait(queue, self)
         # still empty
-        assert_that( queue.qsize(), is_( 0 ) )
+        assert_that(queue.qsize(), is_(0))
 
         transaction.commit()
 
-        assert_that( queue.get(block=False), is_( self ) )
+        assert_that(queue.get(block=False), is_(self))
 
     def test_put_transaction_abort(self):
         queue = Queue()
         transaction.begin()
-        put_nowait( queue, 'aborted' )
+        put_nowait(queue, 'aborted')
         transaction.abort()
 
         transaction.begin()
-        put_nowait( queue, 'committed' )
+        put_nowait(queue, 'committed')
         transaction.commit()
 
-        assert_that( queue.qsize(), is_( 1 ) )
-        assert_that( queue.get( block=False ), is_( 'committed' ) )
+        assert_that(queue.qsize(), is_(1))
+        assert_that(queue.get(block=False), is_('committed'))
 
     def test_put_transaction_savepoint(self):
         queue = Queue()
         transaction.begin()
-        put_nowait( queue, 'presavepoint' )
+        put_nowait(queue, 'presavepoint')
         # we can get a non-optimistic savepoint
         savepoint = transaction.savepoint(optimistic=False)
-        assert_that( savepoint._savepoints, has_length( 1 ) )
+        assert_that(savepoint._savepoints, has_length(1))
         repr(savepoint._savepoints) # cover
-        put_nowait( queue, 'aftersavepoint' )
+        put_nowait(queue, 'aftersavepoint')
 
         # If we rollback the savepoint now, what we just
         # did will be lost, but the original work
@@ -75,8 +72,8 @@ class PutQueueTest(AbstractTestBase):
         savepoint.rollback()
         transaction.commit()
 
-        assert_that( queue.qsize(), is_( 1 ) )
-        assert_that( queue.get( block=False ), is_( 'presavepoint' ) )
+        assert_that(queue.qsize(), is_(1))
+        assert_that(queue.get(block=False), is_('presavepoint'))
 
     def test_put_multiple_correct_order(self):
         # Early builds had a bug where the sort order of the datamanagers
@@ -88,47 +85,27 @@ class PutQueueTest(AbstractTestBase):
         for _ in range(10000):
             transaction.begin()
 
-            put_nowait( queue, 'a' )
-            put_nowait( queue, 'b' )
+            put_nowait(queue, 'a')
+            put_nowait(queue, 'b')
 
             transaction.commit()
 
-            assert_that( queue.get( block=False ), is_( 'a' ) )
-            assert_that( queue.get( block=False ), is_( 'b' ) )
+            assert_that(queue.get(block=False), is_('a'))
+            assert_that(queue.get(block=False), is_('b'))
 
-    def test_put_failure( self ):
+    def test_put_failure(self):
         queue = Queue(1) # unbounded
-        queue.put( object() )
-        assert_that( queue.qsize(), is_( 1 ) )
+        queue.put(object())
+        assert_that(queue.qsize(), is_(1))
 
         transaction.begin()
 
-        put_nowait( queue, self )
+        put_nowait(queue, self)
         # still size 1
-        assert_that( queue.qsize(), is_( 1 ) )
-        with self.assertRaises( Full ) as cm:
+        assert_that(queue.qsize(), is_(1))
+        with self.assertRaises(Full) as cm:
             transaction.commit()
 
 
-        assert_that( cm.exception, is_( Full ) )
-        assert_that( queue.get(block=False), is_( object ) )
-
-class TestObjectDataManager(AbstractTestBase):
-
-    def test_vote(self):
-        class Exc(Exception):
-            pass
-        def vote():
-            raise Exc()
-
-        odm = do(call=lambda: 1, vote=vote)
-        assert_that(calling(odm.tpc_vote).with_args(None), raises(Exc))
-
-    def test_callable_name(self):
-        class X(object):
-            def thing(self):
-                pass
-
-        x = X()
-        odm = do(target=x, method_name='thing')
-        assert_that(odm.callable, is_(x.thing))
+        assert_that(cm.exception, is_(Full))
+        assert_that(queue.get(block=False), is_(object))

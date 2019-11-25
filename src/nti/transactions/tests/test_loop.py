@@ -3,8 +3,7 @@
 
 from __future__ import print_function, absolute_import, division
 
-#disable: accessing protected members, too many methods
-#pylint: disable=W0212,R0904
+
 import sys
 import unittest
 
@@ -12,7 +11,6 @@ from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import calling
 from hamcrest import raises
-from hamcrest import contains
 from hamcrest import has_property
 from hamcrest import none
 
@@ -26,10 +24,8 @@ from ..interfaces import AbortFailedError
 from ..interfaces import ForeignTransactionError
 from ..interfaces import TransactionLifecycleError
 
-from ..transactions import do
-from ..transactions import do_near_end
-from ..transactions import _do_commit
-from ..transactions import TransactionLoop
+from ..loop import _do_commit
+from ..loop import TransactionLoop
 
 import transaction
 from transaction.interfaces import TransientError
@@ -88,7 +84,7 @@ class TestCommit(unittest.TestCase):
                                                       '', 0),
                         raises(MyException))
 
-    @fudge.patch('nti.transactions.transactions.logger.warn')
+    @fudge.patch('nti.transactions.loop.logger.warn')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
         _do_commit(self.RaisingCommit(None), '', 0)
@@ -289,7 +285,7 @@ class TestLoop(unittest.TestCase):
         assert_that(result, is_(42))
 
     @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'nti.transactions.transactions.print_exception')
+                 'nti.transactions.loop.print_exception')
     def test_abort_systemexit(self, fake_begin, fake_print):
         fake_tx = fudge.Fake()
         fake_tx.expects('abort').raises(ValueError)
@@ -324,19 +320,3 @@ class TestLoop(unittest.TestCase):
             raise Exception()
         loop = TransactionLoop(handler)
         assert_that(calling(loop), raises(AbortFailedError))
-
-class TestDataManagers(unittest.TestCase):
-
-    def test_data_manager_sorting(self):
-        results = []
-        def test_call(x):
-            results.append(x)
-
-        # The managers will execute in order added (since identical),
-        # except for the one that requests to go last.
-        do(call=test_call, args=(0,))
-        do(call=test_call, args=(1,))
-        do_near_end(call=test_call, args=(10,))
-        do(call=test_call, args=(2,))
-        transaction.commit()
-        assert_that(results, contains(0, 1, 2, 10))
