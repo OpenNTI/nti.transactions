@@ -9,6 +9,19 @@ from __future__ import print_function, absolute_import, division
 
 from transaction.interfaces import TransactionError
 
+from transaction.interfaces import ITransaction
+
+# pylint:disable=no-method-argument
+
+class IExtendedTransaction(ITransaction):
+    """Extensions to the transaction api."""
+
+    def nti_commit():
+        """Like ``commit``, but produces a perfmetrics ``transaction.commit`` metric."""
+
+    def nti_abort():
+        """Like ``abort``, but produces a perfmetrics ``transaction.abort`` metric."""
+
 class CommitFailedError(TransactionError):
     """
     Committing the active transaction failed for an unknown
