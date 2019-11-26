@@ -17,10 +17,10 @@
 
 Extensions to the `transaction`_ package.
 
-Transaction Manager
-===================
+Transaction Management
+======================
 
-``nti.transactions.transactions.TransactionsLoop`` is a retryable
+``nti.transactions.loop.TransactionsLoop`` is a retryable
 transaction manager. It is conceptually similar to the `attempts`_
 context manager provided by the transaction package itself, but much
 more powerful and extensible via subclasses. Features include:
@@ -34,7 +34,8 @@ more powerful and extensible via subclasses. Features include:
 
 The TransactionLoop can be used as-is, or it can be subclassed for
 customization. For use in a Pyramid tween, for example, a minimal
-subclass might look like this::
+subclass might look like this (see ``nti.transactions.pyramid_tween``
+for a full-featured tween)::
 
   >>> class PyramidTransactionLoop(TransactionLoop):
   ...    def prep_for_retry(self, number, request):
@@ -52,7 +53,7 @@ The first data manager is used to put an object in a ``queue``
 transaction succeeds. If the queue is full, then the transaction will
 not be allowed to commit::
 
-  >>> from nti.transactions.transactions import put_nowait
+  >>> from nti.transactions.queue import put_nowait
   >>> put_nowait(queue, object)
 
 This is a special case of the ``ObjectDataManager``, which will call
@@ -63,12 +64,12 @@ the transaction is successful. It can be constructed directly, but the
 ``do`` function is a shorthand way of joining one to the current
 transaction::
 
-  >>> from nti.transactions.transactions import do
+  >>> from nti.transactions.manager import do
   >>> do(print, args=("Committed"))
 
 .. caution:: See the documentation of this object for numerous
-			 warnings about side-effects and its interaction with the
-			 transaction machinery. Use it with care!
+	     warnings about side-effects and its interaction with the
+	     transaction machinery. Use it with care!
 
 .. _attempts: http://zodb.readthedocs.io/en/latest/transactions.html#retrying-transactions
 .. _data managers: http://zodb.readthedocs.io/en/latest/transactions.html#data-managers

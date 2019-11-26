@@ -3,10 +3,16 @@
  Changes
 =========
 
-3.0.1 (unreleased)
+3.1.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.8.
+
+- Refactor internal implementation details. Instead of importing
+  everything from ``nti.transactions.transactions``, more specific
+  modules are used to group objects by function. The old imports
+  continue to work. In 4.0 they will generate a deprecation warning
+  and in 5.0 they will be removed.
 
 
 3.0.0 (2019-09-06)
