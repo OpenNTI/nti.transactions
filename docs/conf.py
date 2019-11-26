@@ -357,6 +357,10 @@ intersphinx_mapping = {
     'https://docs.python.org/': None,
     'https://transaction.readthedocs.io/en/latest/': None,
     'https://perfmetrics.readthedocs.io/en/latest/': None,
+    'https://pyramid.readthedocs.io/en/latest/': None,
+    'https://docs.pylonsproject.org/projects/pyramid-retry/en/latest/': None,
+    "https://docs.pylonsproject.org/projects/pyramid-tm/en/latest/": None
+
 }
 
 extlinks = {'issue': ('https://github.com/NextThought/nti.transactions/issues/%s',

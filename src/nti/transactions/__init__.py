@@ -25,17 +25,13 @@ _transaction._LOGGER = __import__('logging').getLogger('txn.GLOBAL')
 
 # Introduce a 'nti_abort' function that wraps the raw abort as a metric.
 raw_abort = _transaction.Transaction.abort
-if hasattr(raw_abort, 'im_func'):
-    # Py2
-    raw_abort = raw_abort.im_func
+raw_abort = getattr(raw_abort, 'im_func', raw_abort) # Py2
 _transaction.Transaction.nti_abort = Metric('transaction.abort', rate=0.1)(raw_abort)
 del raw_abort
 
 # Ditto for commit
 raw_commit = _transaction.Transaction.commit
-if hasattr(raw_commit, 'im_func'):
-    # Py2
-    raw_commit = raw_commit.im_func
+raw_commit = getattr(raw_commit, 'im_func', raw_commit) # Py2
 _transaction.Transaction.nti_commit = Metric('transaction.commit', rate=0.1)(raw_commit)
 del raw_commit
 

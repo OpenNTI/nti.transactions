@@ -13,7 +13,7 @@ import transaction
 
 try:
     from queue import Full as QFull
-except ImportError:
+except ImportError: # pragma: no cover
     # Py2
     # The gevent.queue.Full class is just an alias
     # for the stdlib class, on both Py2 and Py3

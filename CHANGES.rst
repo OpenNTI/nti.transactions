@@ -14,6 +14,8 @@
   continue to work. In 4.0 they will generate a deprecation warning
   and in 5.0 they will be removed.
 
+- Add a Pyramid tween to manage transactions and transaction retries.
+
 
 3.0.0 (2019-09-06)
 ==================
