@@ -9,9 +9,10 @@ entry_points = {
 }
 
 TESTS_REQUIRE = [
-    'zope.testrunner',
-    'nti.testing',
     'fudge',
+    'nti.testing',
+    'pylint',
+    'zope.testrunner',
 ]
 
 def _read(fname):

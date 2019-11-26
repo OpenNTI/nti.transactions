@@ -355,6 +355,8 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     'https://docs.python.org/': None,
+    'https://transaction.readthedocs.io/en/latest/': None,
+    'https://perfmetrics.readthedocs.io/en/latest/': None,
 }
 
 extlinks = {'issue': ('https://github.com/NextThought/nti.transactions/issues/%s',

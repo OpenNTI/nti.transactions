@@ -17,10 +17,16 @@ class IExtendedTransaction(ITransaction):
     """Extensions to the transaction api."""
 
     def nti_commit():
-        """Like ``commit``, but produces a perfmetrics ``transaction.commit`` metric."""
+        """
+        Like ``commit``, but produces a :obj:`perfmetrics.Metric` ``transaction.commit``
+        metric.
+        """
 
     def nti_abort():
-        """Like ``abort``, but produces a perfmetrics ``transaction.abort`` metric."""
+        """
+        Like ``abort``, but produces a :obj:`perfmetrics.Metric`
+        ``transaction.abort`` metric.
+        """
 
 class CommitFailedError(TransactionError):
     """

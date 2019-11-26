@@ -28,7 +28,6 @@ import six
 from zope.exceptions.exceptionformatter import format_exception
 from zope.exceptions.exceptionformatter import print_exception
 
-TRACE = 5 # from ZODB.loglevels.
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
 from .interfaces import ForeignTransactionError
@@ -130,6 +129,7 @@ class TransactionLoop(object):
 
     #: If not none, this should be a number that will be passed to
     #: time.sleep or gevent.sleep in between retries.
+    #: TODO: add a backoff delay interval/multiplier between retries.
     sleep = None
     attempts = 10
     long_commit_duration = DEFAULT_LONG_RUNNING_COMMIT_IN_SECS  # seconds
