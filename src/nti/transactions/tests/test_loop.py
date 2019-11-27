@@ -3,6 +3,7 @@
 
 from __future__ import print_function, absolute_import, division
 
+# pylint:disable=too-many-public-methods
 
 import sys
 import unittest
@@ -87,7 +88,7 @@ class TestCommit(unittest.TestCase):
     @fudge.patch('nti.transactions.loop.logger.warn')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
-        _do_commit(self.RaisingCommit(None), '', 0)
+        _do_commit(self.RaisingCommit(None), '', -1)
 
 class TestLoop(unittest.TestCase):
 
@@ -172,21 +173,23 @@ class TestLoop(unittest.TestCase):
         assert_that(loop, has_property('setupcalled', is_true()))
         assert_that(loop, has_property('teardowncalled', is_true()))
 
-    def test_retriable(self, loop_class=TransactionLoop, exc_type=TransientError):
+    def test_retriable(self, loop_class=TransactionLoop, exc_type=TransientError,
+                       raise_count=1, loop_args=(), loop_kwargs=None):
 
         calls = []
         def handler():
             # exc_info should be clear on entry.
             assert_that(sys.exc_info(), is_((None, None, None)))
-            if not calls:
+            if len(calls) < raise_count:
                 calls.append(1)
-                raise exc_type()
+                raise exc_type(calls)
             return "hi"
 
-        loop = loop_class(handler)
+        loop = loop_class(handler, *loop_args, **(loop_kwargs or {}))
         result = loop()
         assert_that(result, is_("hi"))
-        assert_that(calls, is_([1]))
+        assert_that(calls, is_([1] * raise_count))
+        return loop
 
     def test_custom_retriable(self):
         class Loop(TransactionLoop):
@@ -218,6 +221,31 @@ class TestLoop(unittest.TestCase):
 
         loop = Loop(None)
         loop._retryable(None, (None, MyError(), None))
+
+    def test_retryable_backoff(self):
+        class NotRandom(object):
+            def randint(self, _floor, ceiling):
+                return ceiling
+
+        class Loop(TransactionLoop):
+            def __init__(self, *args, **kwargs):
+                TransactionLoop.__init__(self, *args, **kwargs)
+                self.times = []
+                self.random = NotRandom()
+                self._sleep = self.times.append
+
+        # By default, it is not called.
+        loop = self.test_retriable(Loop, raise_count=5)
+        assert_that(loop, has_property('times', []))
+
+        # Setting a delay calls it
+        loop = self.test_retriable(Loop, raise_count=5, loop_kwargs={'sleep': 0.1})
+        # The ceiling arguments are 2**attempt - 1, so
+        # 1, 3, 7, 15, 31, and sleep times are
+        # 0.1, 0.3, 0.7, 1.5, 3,1
+        times = [(2 ** x - 1) * 0.1 for x in range(1, 6)]
+        assert_that(loop, has_property('times',
+                                       times))
 
 
     @fudge.patch('transaction._manager.TransactionManager.begin',
@@ -284,15 +312,13 @@ class TestLoop(unittest.TestCase):
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'nti.transactions.loop.print_exception')
-    def test_abort_systemexit(self, fake_begin, fake_print):
+    @fudge.patch('transaction._manager.TransactionManager.begin')
+    def test_abort_systemexit(self, fake_begin):
         fake_tx = fudge.Fake()
         fake_tx.expects('abort').raises(ValueError)
         fake_tx.provides('isDoomed').returns(False)
 
         fake_begin.expects_call().returns(fake_tx)
-        fake_print.is_callable()
 
         def handler():
             raise SystemExit()

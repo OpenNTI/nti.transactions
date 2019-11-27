@@ -16,6 +16,9 @@
 
 - Add a Pyramid tween to manage transactions and transaction retries.
 
+- Make the transaction loop increase the time it sleeps between
+  retries following the `random binary exponential backoff algorithm
+  <https://en.wikipedia.org/wiki/Exponential_backoff>`_ used by Ethernet.
 
 3.0.0 (2019-09-06)
 ==================
