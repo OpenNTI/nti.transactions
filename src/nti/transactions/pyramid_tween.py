@@ -121,7 +121,7 @@ class TransactionTween(TransactionLoop):
     # delay backoff time/multiplier, long_commit_duration and
     # side_effect_free as config params. Maybe model on pyramid_tm?
 
-    def prep_for_retry(self, number, request): # pylint:disable=arguments-differ
+    def prep_for_retry(self, attempts_remaining, request): # pylint:disable=arguments-differ
         """
         Prepares the request for possible retries.
 
@@ -178,8 +178,7 @@ class TransactionTween(TransactionLoop):
 
         # We attempt to fix that here. (This is the best place because
         # we are now sure the body is seekable.)
-        # TODO: Document this.
-        if number == (self.attempts - 1) \
+        if attempts_remaining == (self.attempts - 1) \
            and request.method in ('POST', 'PUT') \
            and request.content_type == 'application/x-www-form-urlencoded':
             # This needs tested.
