@@ -228,6 +228,7 @@ class TestLoop(unittest.TestCase):
                 return ceiling
 
         class Loop(TransactionLoop):
+            attempts = 10
             def __init__(self, *args, **kwargs):
                 TransactionLoop.__init__(self, *args, **kwargs)
                 self.times = []

@@ -140,7 +140,7 @@ class TransactionLoop(object):
 
     #: How many total attempts will be made, including the initial. This
     #: can be set in a subclass, if not passed to the constructor.
-    attempts = 10
+    attempts = 3
 
     #: Commits longer than this (seconds) will trigger a warning log message.
     #: This can be set in a subclass if not passed to the constructor.

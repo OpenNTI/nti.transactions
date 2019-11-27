@@ -20,6 +20,9 @@
   retries following the `random binary exponential backoff algorithm
   <https://en.wikipedia.org/wiki/Exponential_backoff>`_ used by Ethernet.
 
+- Reduce the default number of attempts to 4 (one attempt and 3
+  retries). See `issue 35 <https://github.com/NextThought/nti.transactions/issues/35>`_.
+
 3.0.0 (2019-09-06)
 ==================
 
