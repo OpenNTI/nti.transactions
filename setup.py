@@ -50,10 +50,11 @@ setup(
     namespace_packages=['nti'],
     tests_require=TESTS_REQUIRE,
     install_requires=[
-        'setuptools',
         'dm.transaction.aborthook',
         'perfmetrics',
+        'setuptools',
         'transaction >= 2.4.0',
+        'zope.cachedescriptors',
         'zope.exceptions',
         'zope.interface',
     ],

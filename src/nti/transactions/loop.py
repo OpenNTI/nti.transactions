@@ -16,6 +16,7 @@ logger = __import__('logging').getLogger(__name__)
 
 import sys
 import time
+import random
 try:
     from sys import exc_clear
 except ImportError: # pragma: no cover
@@ -27,6 +28,7 @@ import six
 
 from zope.exceptions.exceptionformatter import format_exception
 from zope.exceptions.exceptionformatter import print_exception
+from zope.cachedescriptors.property import Lazy
 
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
@@ -38,12 +40,6 @@ import transaction
 from transaction.interfaces import AlreadyInTransaction
 from transaction.interfaces import NoTransaction
 
-try:
-    from gevent import sleep as _sleep
-except ImportError:
-    from time import sleep as _sleep
-
-
 from nti.transactions import DEFAULT_LONG_RUNNING_COMMIT_IN_SECS
 
 __all__ = [
@@ -51,7 +47,9 @@ __all__ = [
 ]
 
 
-def _do_commit(tx, description, long_commit_duration, perf_counter=time.time):
+def _do_commit(tx, description, long_commit_duration, perf_counter=getattr(time,
+                                                                           'perf_counter',
+                                                                           time.time)):
     exc_info = sys.exc_info()
     try:
         begin = perf_counter()
@@ -88,25 +86,27 @@ class TransactionLoop(object):
     prone and with added logging and hooks.
 
     This object is callable (passing any arguments along to its
-    handle) and runs its handler in the transaction loop.
+    handler) and runs its handler in the transaction loop.
 
     The handler code may doom the transaction, but they must not
     attempt to commit or abort it. A doomed transaction, or one whose
-    commit is vetoed by :meth:`should_abort_due_to_no_side_effects`
-    or :meth:`should_veto_commit` is never retried.
+    commit is vetoed by :meth:`should_abort_due_to_no_side_effects` or
+    :meth:`should_veto_commit` is never retried.
 
     .. versionchanged:: 3.0
 
-       When this object is called, the thread-local default or global
-       TransactionManager is placed into explicit mode (if it wasn't already).
-       The handler callable is forbidden from beginning, aborting
-       or committing the transaction.
-       Explicit transactions can be faster in ZODB, and are easier to reason about.
+        When this object is called, the thread-local default or global
+        :class:`transaction.TransactionManager` is placed into explicit
+        mode (if it wasn't already). The handler callable is forbidden
+        from beginning, aborting or committing the transaction. Explicit
+        transactions can be faster in ZODB, and are easier to reason
+        about.
 
-       If the application begins, commits or aborts the transaction, it can expect this
-       object to raise `transaction.interfaces.NoTransaction`,
-       `transaction.interfaces.AlreadyInTransaction`
-       or `nti.transactions.interfaces.TransactionLifecycleError`.
+        If the application begins, commits or aborts the transaction, it
+        can expect this object to raise
+        :exc:`transaction.interfaces.NoTransaction`,
+        :exc:`transaction.interfaces.AlreadyInTransaction` or
+        :exc:`nti.transactions.interfaces.TransactionLifecycleError`.
     """
 
     class AbortAndReturn(Exception):
@@ -127,11 +127,23 @@ class TransactionLoop(object):
     #: Deprecated alias for `AbortAndReturn`
     AbortException = AbortAndReturn
 
-    #: If not none, this should be a number that will be passed to
-    #: time.sleep or gevent.sleep in between retries.
-    #: TODO: add a backoff delay interval/multiplier between retries.
+    #: If not None, this is a number that specifies the base amount of time
+    #: to wait after a failed transaction attempt before retrying. Each
+    #: retry attempt will pick a delay following the binary exponential
+    #: backoff algorithm: ``sleep * (random number between 0 and 2^retry-1)``.
+    #: (A simple increasing multiplier might work well if there is only one other
+    #: transaction that we conflict with, but in cases of multiple conflicts
+    #: or even new conflicts, the random backoff should provide higher
+    #: overall progress.)
+    #: This can be set in a subclass if not passed to the constructor.
     sleep = None
+
+    #: How many total attempts will be made, including the initial. This
+    #: can be set in a subclass, if not passed to the constructor.
     attempts = 10
+
+    #: Commits longer than this (seconds) will trigger a warning log message.
+    #: This can be set in a subclass if not passed to the constructor.
     long_commit_duration = DEFAULT_LONG_RUNNING_COMMIT_IN_SECS  # seconds
 
     #: The default return value from :meth:`should_abort_due_to_no_side_effects`.
@@ -140,8 +152,18 @@ class TransactionLoop(object):
     #: as an instance variable.
     side_effect_free = False
 
-    def __init__(self, handler, retries=None, sleep=None,
-                 long_commit_duration=None):
+    def __init__(
+            self, handler,
+            retries=None, # type: int
+            sleep=None, # type: float
+            long_commit_duration=None, # type: float
+    ):
+        """
+        :keyword float sleep: Sets the :attr:`initial_retry_delay`.
+        :keyword int retries: If given, the number of times a transaction will be
+            retried. Note that this is one less than the total number of
+            :attr:`attempts`
+        """
         self.handler = handler
         if retries is not None:
             self.attempts = retries + 1
@@ -149,6 +171,7 @@ class TransactionLoop(object):
             self.long_commit_duration = long_commit_duration
         if sleep is not None:
             self.sleep = sleep
+            self.random = random.SystemRandom()
 
     def prep_for_retry(self, number, *args, **kwargs):
         """
@@ -211,7 +234,7 @@ class TransactionLoop(object):
 
         By default, we consult the transaction manager, along with the
         list of (type, predicate) values we have in this object's
-        `_retryable_errors` tuple.
+        ``_retryable_errors`` tuple.
         """
         v = exc_info[1]
         retryable = False
@@ -331,12 +354,13 @@ class TransactionLoop(object):
             self.tearDown()
 
     def __loop(self, txm, note, args, kwargs): # pylint:disable=too-many-branches
-        number = self.attempts
+        attempts_remaining = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
         unused_descr = self._UNUSED_DESCRIPTION
-        while number:
-            number -= 1
+
+        while attempts_remaining:
+            attempts_remaining -= 1
             # Throw away any previous exceptions our loop raised.
             # The TB could be taking lots of memory
             exc_clear()
@@ -346,7 +370,7 @@ class TransactionLoop(object):
 
             try:
                 if need_retry:
-                    self.prep_for_retry(number, *args, **kwargs)
+                    self.prep_for_retry(attempts_remaining, *args, **kwargs)
 
                 result = self.run_handler(*args, **kwargs)
 
@@ -442,7 +466,7 @@ class TransactionLoop(object):
                 tx.nti_abort()
                 return e.response
             except Exception: # pylint:disable=broad-except
-                self.__handle_generic_exception(tx, number)
+                self.__handle_generic_exception(tx, attempts_remaining)
             except SystemExit:
                 self.__handle_exit(tx)
 
@@ -460,7 +484,6 @@ class TransactionLoop(object):
         except Exception: # Ignore. pylint:disable=broad-except
             pass
 
-
     @staticmethod
     def __has_current_transaction(txm):
         # Handles an explicit transaction manager raising an exception
@@ -470,14 +493,15 @@ class TransactionLoop(object):
         except NoTransaction:
             return None
 
-    def __handle_generic_exception(self, tx, attempts_remaining, _reraise=six.reraise):
+    def __handle_generic_exception(self, tx, attempts_remaining,
+                                   _reraise=six.reraise, _exc_info=sys.exc_info):
         # The code in the transaction package checks the retryable state
         # BEFORE aborting the current transaction. This matters because
         # aborting the transaction changes the transaction that the manager
         # has to a new one, and thus changes the set of registered resources
         # that participate in _retryable, depending on what synchronizers
         # are registered.
-        exc_info = sys.exc_info()
+        exc_info = _exc_info()
         try:
             retryable = self._retryable(tx, exc_info)
             self._abort_on_exception(exc_info, retryable, attempts_remaining, tx)
@@ -488,23 +512,32 @@ class TransactionLoop(object):
             exc_info = None
 
         if self.sleep:
-            _sleep(self.sleep)
+            attempt_num = self.attempts - attempts_remaining
+            backoff = self.random.randint(0, 2 ** attempt_num - 1)
+            self._sleep(self.sleep * backoff) # pylint:disable=too-many-function-args
 
-    def __handle_exit(self, tx, _reraise=six.reraise, _exc_info=sys.exc_info):
+
+    def __handle_exit(self, tx,
+                      _reraise=six.reraise, _exc_info=sys.exc_info, _print_exc=print_exception):
         # If we are exiting, or otherwise probably going to
         # exit, do try to abort the transaction. The state of
         # the system is somewhat undefined at this point,
         # though, so don't try to time or log it, just print
         # to stderr on exception. Be sure to reraise the
-        # original SystemExit
+        # original SystemExit.
         exc_info = _exc_info()
         try:
             try:
                 tx.abort()
             except: # pylint:disable=bare-except
-                if print_exception is not None:
-                    print_exception(*_exc_info())
+                _print_exc(*_exc_info())
 
             _reraise(*exc_info)
         finally:
             exc_info = None
+
+    @Lazy
+    def _sleep(self):
+        # Delay accessing the sleep function until it's used in case
+        # it gets monkey patched (e.g., gevent)
+        return time.sleep
