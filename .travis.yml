@@ -23,7 +23,7 @@ notifications:
 install:
   - pip install -U pip
   - pip install -U setuptools
-  - pip install -U coveralls coverage
+  - pip install -U coveralls coverage pyramid
   - pip install -U -e ".[test]"
 
 
