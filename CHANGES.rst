@@ -28,6 +28,11 @@
 - Make the transaction loop emit more metrics. See `issue 31
   <https://github.com/NextThought/nti.transactions/issues/31>`_.
 
+- Make commit logging now always happen at least at the debug level,
+  escalating to warning for long commits. It also includes the number
+  of retries taken and the amount of time spent sleeping. See `issue
+  32 <https://github.com/NextThought/nti.transactions/issues/32>`_.
+
 3.0.0 (2019-09-06)
 ==================
 

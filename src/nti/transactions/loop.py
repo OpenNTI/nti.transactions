@@ -12,7 +12,9 @@ call this if you need such functionality.
 from __future__ import print_function, absolute_import, division
 __docformat__ = "restructuredtext en"
 
-logger = __import__('logging').getLogger(__name__)
+from logging import DEBUG
+from logging import WARNING
+from logging import getLogger
 
 import sys
 import time
@@ -48,17 +50,28 @@ __all__ = [
     'TransactionLoop',
 ]
 
-def _do_commit(tx, description, long_commit_duration, perf_counter=getattr(time,
-                                                                           'perf_counter',
-                                                                           time.time)):
+logger = getLogger(__name__)
+
+def _do_commit(tx, description, long_commit_duration,
+               retries, sleep_time,
+               _logger=logger,
+               _DEBUG=DEBUG,
+               _WARNING=WARNING,
+               _perf_counter=getattr(time, 'perf_counter', time.time)):
     exc_info = sys.exc_info()
     try:
-        begin = perf_counter()
+        begin = _perf_counter()
         tx.nti_commit()
-        duration = perf_counter() - begin
+        level = _DEBUG
+        duration = _perf_counter() - begin
         if duration > long_commit_duration:
-            # We held (or attempted to hold) locks for a really, really, long time. Why?
-            logger.warn("Slow running commit for %s in %ss", description, duration)
+            level = _WARNING
+        if _logger.isEnabledFor(level):
+            _logger.log(
+                level,
+                "Committed transaction description=%s, duration=%s, retries=%s, sleep_time=%s",
+                description, duration, retries, sleep_time
+            )
     except TypeError:
         # Translate this into something meaningful
         exc_info = sys.exc_info()
@@ -425,14 +438,17 @@ class TransactionLoop(object):
             stats.flush()
 
     def __loop(self, txm, note, stats, args, kwargs):
-        # pylint:disable=too-many-branches,too-many-statements
+        # pylint:disable=too-many-branches,too-many-statements,too-many-locals
         attempts_remaining = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
         unused_descr = self._UNUSED_DESCRIPTION
+        sleep_time = 0
 
         while attempts_remaining:
             attempts_remaining -= 1
+            # Starting at 0 for convenience
+            attempt_number = self.attempts - attempts_remaining - 1
             # Throw away any previous exceptions our loop raised.
             # The TB could be taking lots of memory
             exc_clear()
@@ -490,9 +506,9 @@ class TransactionLoop(object):
                     stats('transaction.doomed' if tx.isDoomed() else 'transaction.vetoed')
                     raise self.AbortAndReturn(result, "doomed or vetoed")
 
-                _do_commit(tx, note, self.long_commit_duration)
+                _do_commit(tx, note, attempt_number, sleep_time, self.long_commit_duration)
                 stats('transaction.successful')
-                if attempts_remaining != self.attempts - 1:
+                if attempt_number:
                     stats('transaction.retry', self.attempts - 1 - attempts_remaining)
                 return result
             except ForeignTransactionError:
@@ -542,9 +558,10 @@ class TransactionLoop(object):
                 tx.nti_abort()
                 return e.response
             except Exception: # pylint:disable=broad-except
-                self.__handle_generic_exception(tx, attempts_remaining)
+                sleep_time += self.__handle_generic_exception(tx, attempts_remaining)
             except SystemExit:
                 self.__handle_exit(tx)
+                raise # pragma: no cover
 
 
     def __abort_current_transaction_quietly(self, txm):
@@ -588,9 +605,13 @@ class TransactionLoop(object):
             exc_info = None
 
         if self.sleep:
-            attempt_num = self.attempts - attempts_remaining
+            attempt_num = self.attempts - attempts_remaining # starting at 1
             backoff = self.random.randint(0, 2 ** attempt_num - 1)
-            self._sleep(self.sleep * backoff) # pylint:disable=too-many-function-args
+            sleep_time = self.sleep * backoff
+            self._sleep(sleep_time) # pylint:disable=too-many-function-args
+        else:
+            sleep_time = 0
+        return sleep_time
 
 
     def __handle_exit(self, tx,

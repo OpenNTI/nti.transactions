@@ -51,14 +51,19 @@ class TestCommit(unittest.TestCase):
                 raise self.t
 
     def test_commit_raises_type_error_raises_commit_failed(self):
-        assert_that(calling(_do_commit).with_args(self.RaisingCommit(TypeError),
-                                                  '', 0),
+        assert_that(calling(_do_commit)
+                    .with_args(
+                        self.RaisingCommit(TypeError),
+                        '', 0, 0, 0
+                    ),
                     raises(CommitFailedError))
 
     def test_commit_raises_type_error_raises_commit_failed_good_message(self):
-        assert_that(calling(_do_commit).with_args(
-            self.RaisingCommit(TypeError("A custom message")),
-            '', 0),
+        assert_that(calling(_do_commit)
+                    .with_args(
+                        self.RaisingCommit(TypeError("A custom message")),
+                        '', 0, 0, 0,
+                    ),
                     raises(CommitFailedError, "A custom message"))
 
 
@@ -66,16 +71,21 @@ class TestCommit(unittest.TestCase):
     def test_commit_raises_assertion_error(self, fake_logger):
         fake_logger.expects_call()
 
-        assert_that(calling(_do_commit).with_args(self.RaisingCommit(AssertionError),
-                                                  '', 0),
+        assert_that(calling(_do_commit)
+                    .with_args(
+                        self.RaisingCommit(AssertionError), '', 0, 0, 0
+                    ),
                     raises(AssertionError))
 
     @fudge.patch('nti.transactions.transactions.logger.exception')
     def test_commit_raises_value_error(self, fake_logger):
         fake_logger.expects_call()
 
-        assert_that(calling(_do_commit).with_args(self.RaisingCommit(ValueError),
-                                                  '', 0),
+        assert_that(calling(_do_commit)
+                    .with_args(
+                        self.RaisingCommit(ValueError),
+                        '', 0, 0, 0,
+                    ),
                     raises(ValueError))
 
     @fudge.patch('nti.transactions.transactions.logger.exception')
@@ -88,14 +98,17 @@ class TestCommit(unittest.TestCase):
         try:
             raise MyException()
         except MyException:
-            assert_that(calling(_do_commit).with_args(self.RaisingCommit(ValueError),
-                                                      '', 0),
+            assert_that(calling(_do_commit)
+                        .with_args(
+                            self.RaisingCommit(ValueError),
+                            '', 0, 0, 0
+                        ),
                         raises(MyException))
 
-    @fudge.patch('nti.transactions.loop.logger.warn')
+    @fudge.patch('nti.transactions.loop.logger.log')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
-        _do_commit(self.RaisingCommit(None), '', -1)
+        _do_commit(self.RaisingCommit(None), '', -1, 0, 0)
 
 class TrueStatsDClient(FakeStatsDClient):
     # https://github.com/zodb/perfmetrics/issues/23
