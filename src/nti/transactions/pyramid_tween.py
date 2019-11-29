@@ -47,6 +47,8 @@ from nti.transactions.transactions import TransactionLoop
 __all__ = [
     'commit_veto',
     'is_side_effect_free',
+    'is_error_retryable',
+    'is_last_attempt',
     'TransactionTween',
     'transaction_tween_factory',
 ]
@@ -115,13 +117,45 @@ def is_side_effect_free(request):
     # Every non-get probably has side effects
     return False
 
+
+def is_last_attempt(request):
+    """
+    Return `True` if the request is on its last attempt, meaning that
+    the `TransactionTween` will not invoke the handler again, regardless
+    of what happens during this attempt.
+    """
+    environ = request.environ
+    attempt = environ.get('retry.attempt')
+    attempts = environ.get("retry.attempts")
+
+    return True if attempt is None or attempts is None else attempt + 1 == attempts
+
+
+def is_error_retryable(request, exc):
+    """
+    Return `True` if the exception is one that can be retried.
+
+    This will return `False` if the request is on its last attempt.
+    """
+    if is_last_attempt(request) or 'nti.transaction_tween_retryable' not in request.environ:
+        return False
+
+    return request.environ['nti.transaction_tween_retryable'](exc)
+
+
 class TransactionTween(TransactionLoop):
+    """
+    A Pyramid tween for retrying execution of a request.
+
+    When the request body is executing, the functions :func:`is_last_attempt`
+    and :func:`is_error_retryable` can be used to influence handler behaviour.
+    """
 
     # TODO: Take the number of attempts, sleep delay,
     # delay backoff time/multiplier, long_commit_duration and
     # side_effect_free as config params. Maybe model on pyramid_tm?
 
-    def prep_for_retry(self, attempts_remaining, request): # pylint:disable=arguments-differ
+    def prep_for_retry(self, attempts_remaining, tx, request): # pylint:disable=arguments-differ
         """
         Prepares the request for possible retries.
 
@@ -161,7 +195,14 @@ class TransactionTween(TransactionLoop):
             raise self.AbortException(HTTPBadRequest(str(e)),
                                       "IOError on reading body")
 
-        # XXX: HACK
+        attempts = self.attempts
+        # Starting at 0 for compatibility with pyramid_retry.
+        attempt_number = attempts - attempts_remaining - 1
+        request.environ['retry.attempt'] = attempt_number
+        request.environ['retry.attempts'] = attempts
+        request.environ['nti.transaction_tween_retryable'] = lambda ex: self._retryable(
+            tx, (None, ex, None)
+        )
 
         # WebTest, browsers, and many of our integration tests by
         # default sets a content type of
@@ -178,7 +219,7 @@ class TransactionTween(TransactionLoop):
 
         # We attempt to fix that here. (This is the best place because
         # we are now sure the body is seekable.)
-        if attempts_remaining == (self.attempts - 1) \
+        if attempt_number == 0 \
            and request.method in ('POST', 'PUT') \
            and request.content_type == 'application/x-www-form-urlencoded':
             # This needs tested.

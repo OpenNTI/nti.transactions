@@ -198,7 +198,7 @@ class TransactionLoop(object):
             self.sleep = sleep
             self.random = random.SystemRandom()
 
-    def prep_for_retry(self, attempts_remaining, *args, **kwargs):
+    def prep_for_retry(self, attempts_remaining, tx, *args, **kwargs):
         """
         Called just after a transaction begins if there will be
         more than one attempt possible. Do any preparation
@@ -207,6 +207,10 @@ class TransactionLoop(object):
 
         :param int attempts_remaining: How many attempts remain. Will always be
           at least 1.
+        :param tx: The transaction that's just begun.
+
+        .. versionchanged:: 3.0
+           Add the *tx* parameter.
         """
 
     def should_abort_due_to_no_side_effects(self, *args, **kwargs): # pylint:disable=unused-argument
@@ -438,7 +442,7 @@ class TransactionLoop(object):
 
             try:
                 if need_retry:
-                    self.prep_for_retry(attempts_remaining, *args, **kwargs)
+                    self.prep_for_retry(attempts_remaining, tx, *args, **kwargs)
 
                 result = self.run_handler(*args, **kwargs)
 
