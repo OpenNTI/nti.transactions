@@ -7,11 +7,14 @@ Interfaces for nti.transactions.
 
 from __future__ import print_function, absolute_import, division
 
-from transaction.interfaces import TransactionError
+from zope.interface import Interface
+from zope.interface import Attribute
+from zope.interface import implementer
 
+from transaction.interfaces import TransactionError
 from transaction.interfaces import ITransaction
 
-# pylint:disable=no-method-argument
+# pylint:disable=no-method-argument,inherit-non-class
 
 class IExtendedTransaction(ITransaction):
     """Extensions to the transaction api."""
@@ -71,3 +74,101 @@ class ForeignTransactionError(TransactionLifecycleError):
 
     This is a programming error.
     """
+
+class ILoopInvocation(Interface):
+    """
+    Description of why a loop was invoked.
+    """
+    handler = Attribute("The handler to run.")
+    loop = Attribute("The loop doing the running.")
+    args = Attribute("The arguments passed to the handler")
+    kwargs = Attribute("The keyword arguments passed to the handler.")
+
+class ILoopEvent(Interface):
+    """
+    Base class for event loop events.
+    """
+    invocation = Attribute("An ILoopInvocation.")
+
+class IAfterTransactionBegan(ILoopEvent):
+    """
+    A new transaction has begun.
+    """
+
+    tx = Attribute("The transaction.")
+
+class IWillAttemptTransaction(ILoopEvent):
+    """
+    Base class for attempt events.
+    """
+    tx = Attribute("The transaction.")
+    attempt_number = Attribute("The number of the attempt. Starts at 0.")
+
+# We get this in Python 2
+# pylint:disable=too-many-ancestors
+
+class IWillFirstAttempt(IWillAttemptTransaction):
+    """
+    The first attempt.
+    """
+
+class IWillRetryAttempt(IWillAttemptTransaction):
+    """
+    A retry attempt.
+    """
+
+class IWillSleepBetweenAttempts(ILoopEvent):
+    """
+    Will sleep between attempts.
+
+    If the ``sleep_time`` attribute is modified,
+    that will be the time slept.
+    """
+
+    sleep_time = Attribute("The time to sleep.")
+
+
+@implementer(ILoopInvocation)
+class LoopInvocation(object):
+    __slots__ = ('loop', 'handler', 'args', 'kwargs')
+
+    def __init__(self, loop, handler, args, kwargs):
+        self.loop = loop
+        self.handler = handler
+        self.args = args
+        self.kwargs = kwargs
+
+@implementer(ILoopEvent)
+class LoopEvent(object):
+    __slots__ = ('invocation',)
+    def __init__(self, invocation):
+        self.invocation = invocation
+
+@implementer(IAfterTransactionBegan)
+class AfterTransactionBegan(LoopEvent):
+    __slots__ = ('tx',)
+    def __init__(self, invocation, tx):
+        LoopEvent.__init__(self, invocation)
+        self.tx = tx
+
+@implementer(IWillAttemptTransaction)
+class WillAttemptTransaction(LoopEvent):
+    __slots__ = ('tx', 'attempt_number')
+    def __init__(self, invocation, tx, attempt_number):
+        LoopEvent.__init__(self, invocation)
+        self.invocation = invocation
+        self.tx = tx
+        self.attempt_number = attempt_number
+
+class WillFirstAttempt(WillAttemptTransaction):
+    __slots__ = ()
+
+class WillRetryAttempt(WillAttemptTransaction):
+    __slots__ = ()
+
+class WillSleepBetweenAttempts(LoopEvent):
+    __slots__ = ('sleep_time',)
+
+    def __init__(self, invocation, sleep_time):
+        LoopEvent.__init__(self, invocation)
+        self.sleep_time = sleep_time
