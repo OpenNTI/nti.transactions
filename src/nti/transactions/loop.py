@@ -151,7 +151,7 @@ class TransactionLoop(object):
     AbortException = AbortAndReturn
 
     #: If not None, this is a number that specifies the base amount of time
-    #: to wait after a failed transaction attempt before retrying. Each
+    #: (in seconds) to wait after a failed transaction attempt before retrying. Each
     #: retry attempt will pick a delay following the binary exponential
     #: backoff algorithm: ``sleep * (random number between 0 and 2^retry-1)``.
     #: (A simple increasing multiplier might work well if there is only one other

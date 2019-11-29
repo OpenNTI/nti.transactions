@@ -9,8 +9,13 @@ from __future__ import print_function
 
 import json
 import unittest
+
+from pyramid.config import Configurator
+from zope.component import getGlobalSiteManager
+
 from hamcrest import assert_that
 from hamcrest import is_
+from hamcrest import none
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
@@ -18,6 +23,7 @@ from nti.testing.matchers import has_attr
 
 from .. import pyramid_tween
 from .._httpexceptions import HTTPBadRequest
+
 
 class MockRequest(object):
 
@@ -199,9 +205,35 @@ class TestTransactionTween(unittest.TestCase):
         loop = self._makeOne(handler)
         assert_that(loop(MockRequest()), is_(HTTPBadRequest))
 
-    def test_factory(self):
+
+class TestTransactionTweenFactory(unittest.TestCase):
+
+    def setUp(self):
+        self.config = config = config = Configurator(registry=getGlobalSiteManager())
+        config.setup_registry()
+
+    def _makeOne(self, handler=None, **settings):
+        self.config.registry.settings.update(settings)
+        return pyramid_tween.transaction_tween_factory(handler, self.config.registry)
+
+    def test_factory_simple(self):
         handler = 42
 
-        loop = pyramid_tween.transaction_tween_factory(handler, None)
+        loop = self._makeOne(handler)
         assert_that(loop, is_(pyramid_tween.TransactionTween))
-        assert_that(loop.handler, is_(handler))
+        assert_that(loop, has_attr('handler', is_(handler)))
+        assert_that(loop, has_attr('attempts', 3))
+        assert_that(loop, has_attr('long_commit_duration', 6))
+        assert_that(loop, has_attr('sleep', none()))
+
+    def test_factory_attempts(self):
+        loop = self._makeOne(**{'retry.attempts': 42})
+        assert_that(loop.attempts, is_(42))
+
+    def test_factory_long_commit(self):
+        loop = self._makeOne(**{'retry.long_commit_duration': 42})
+        assert_that(loop, has_attr('long_commit_duration', 42))
+
+    def test_factory_sleep(self):
+        loop = self._makeOne(**{'retry.sleep_ms': 10})
+        assert_that(loop, has_attr('sleep', 0.01))
