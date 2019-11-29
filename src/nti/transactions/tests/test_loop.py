@@ -14,11 +14,14 @@ from hamcrest import calling
 from hamcrest import raises
 from hamcrest import has_property
 from hamcrest import none
+from hamcrest import has_items
+from hamcrest import greater_than_or_equal_to
 
 import fudge
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
+from nti.testing.matchers import has_length
 
 from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
@@ -32,6 +35,10 @@ import transaction
 from transaction.interfaces import TransientError
 from transaction.interfaces import NoTransaction
 from transaction.interfaces import AlreadyInTransaction
+
+from perfmetrics.testing import FakeStatsDClient
+from perfmetrics.testing.matchers import is_counter
+from perfmetrics import statsd_client_stack
 
 
 class TestCommit(unittest.TestCase):
@@ -90,6 +97,12 @@ class TestCommit(unittest.TestCase):
         fake_logger.expects_call()
         _do_commit(self.RaisingCommit(None), '', -1)
 
+class TrueStatsDClient(FakeStatsDClient):
+    # https://github.com/zodb/perfmetrics/issues/23
+    def __bool__(self):
+        return True
+    __nonzero__ = __bool__
+
 class TestLoop(unittest.TestCase):
 
     def setUp(self):
@@ -97,10 +110,20 @@ class TestLoop(unittest.TestCase):
             transaction.abort()
         except NoTransaction:
             pass
+        self.statsd_client = TrueStatsDClient()
+        self.statsd_client.random = lambda: 0 # Ignore rate, capture all packets
+        statsd_client_stack.push(self.statsd_client)
+
+    def tearDown(self):
+        statsd_client_stack.pop()
 
     def test_trivial(self):
         result = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)(1)
         assert_that(result, is_(1))
+        # May or may not get a transaction.commit stat first, depending on random
+        assert_that(self.statsd_client.packets, has_length(greater_than_or_equal_to(1)))
+        assert_that(self.statsd_client.observations[-1],
+                    is_counter(name='transaction.successful', value=1))
 
     def test_explicit(self):
         assert_that(transaction.manager, has_property('explicit', is_false()))
@@ -189,6 +212,11 @@ class TestLoop(unittest.TestCase):
         result = loop()
         assert_that(result, is_("hi"))
         assert_that(calls, is_([1] * raise_count))
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.successful', value=1),
+                        is_counter(name='transaction.retry', value=raise_count)))
         return loop
 
     def test_custom_retriable(self):
@@ -210,6 +238,10 @@ class TestLoop(unittest.TestCase):
             raise MyError()
         loop = TransactionLoop(handler, sleep=0.01, retries=100000000)
         assert_that(calling(loop), raises(MyError))
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.failed', value=1)))
 
     def test_isRetryableError_exception(self):
         # If the transaction.isRetryableError() raises, for some reason,
@@ -282,6 +314,10 @@ class TestLoop(unittest.TestCase):
 
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.side_effect_free', value=1)))
 
     @fudge.patch('transaction._transaction.Transaction.nti_abort')
     def test_abort_doomed(self, fake_abort):
@@ -294,6 +330,10 @@ class TestLoop(unittest.TestCase):
 
         result = TransactionLoop(handler)()
         assert_that(result, is_(42))
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.doomed', value=1)))
 
     @fudge.patch('transaction._manager.TransactionManager.begin',
                  'transaction._manager.TransactionManager.get')
@@ -312,6 +352,10 @@ class TestLoop(unittest.TestCase):
 
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.vetoed', value=1)))
 
     @fudge.patch('transaction._manager.TransactionManager.begin')
     def test_abort_systemexit(self, fake_begin):

@@ -26,6 +26,8 @@ except ImportError: # pragma: no cover
 
 import six
 
+from perfmetrics import statsd_client as _statsd_client
+
 from zope.exceptions.exceptionformatter import format_exception
 from zope.exceptions.exceptionformatter import print_exception
 from zope.cachedescriptors.property import Lazy
@@ -45,7 +47,6 @@ from nti.transactions import DEFAULT_LONG_RUNNING_COMMIT_IN_SECS
 __all__ = [
     'TransactionLoop',
 ]
-
 
 def _do_commit(tx, description, long_commit_duration, perf_counter=getattr(time,
                                                                            'perf_counter',
@@ -93,20 +94,42 @@ class TransactionLoop(object):
     commit is vetoed by :meth:`should_abort_due_to_no_side_effects` or
     :meth:`should_veto_commit` is never retried.
 
+    Running the loop will increment these :mod:`perfmetrics` counters:
+
+    transaction.retry
+        The number of retries required in any given loop. Note that
+        if the handler raises non-retryable exceptions, this number will
+        be inflated.
+    transaction.side_effect_free
+        How many side-effect free transactions there have been.
+    transaction.vetoed
+        How many transactions were vetoed.
+    transaction.doomed
+        The number of doomed transactions.
+    transaction.successful
+        The number of transactions that successfully returned.
+    transaction.failed
+        The number of transactions that did not successfully return.
+
+    .. important::
+
+       Instances of this class must be thread safe, and running the loop should
+       not mutate the state of this object.
+
     .. versionchanged:: 3.0
 
-        When this object is called, the thread-local default or global
-        :class:`transaction.TransactionManager` is placed into explicit
-        mode (if it wasn't already). The handler callable is forbidden
-        from beginning, aborting or committing the transaction. Explicit
-        transactions can be faster in ZODB, and are easier to reason
-        about.
+       When this object is called, the thread-local default or global
+       :class:`transaction.TransactionManager` is placed into explicit
+       mode (if it wasn't already). The handler callable is forbidden
+       from beginning, aborting or committing the transaction. Explicit
+       transactions can be faster in ZODB, and are easier to reason
+       about.
 
-        If the application begins, commits or aborts the transaction, it
-        can expect this object to raise
-        :exc:`transaction.interfaces.NoTransaction`,
-        :exc:`transaction.interfaces.AlreadyInTransaction` or
-        :exc:`nti.transactions.interfaces.TransactionLifecycleError`.
+       If the application begins, commits or aborts the transaction, it
+       can expect this object to raise
+       :exc:`transaction.interfaces.NoTransaction`,
+       :exc:`transaction.interfaces.AlreadyInTransaction` or
+       :exc:`nti.transactions.interfaces.TransactionLifecycleError`.
     """
 
     class AbortAndReturn(Exception):
@@ -146,6 +169,8 @@ class TransactionLoop(object):
     #: This can be set in a subclass if not passed to the constructor.
     long_commit_duration = DEFAULT_LONG_RUNNING_COMMIT_IN_SECS  # seconds
 
+    transaction_sample_rate = 0.2
+
     #: The default return value from :meth:`should_abort_due_to_no_side_effects`.
     #: If you are not subclassing, or you do not need access to the arguments
     #: of the called function to make this determination, you may set this
@@ -173,14 +198,14 @@ class TransactionLoop(object):
             self.sleep = sleep
             self.random = random.SystemRandom()
 
-    def prep_for_retry(self, number, *args, **kwargs):
+    def prep_for_retry(self, attempts_remaining, *args, **kwargs):
         """
         Called just after a transaction begins if there will be
         more than one attempt possible. Do any preparation
         needed to cleanup or prepare reattempts, or raise
         :class:`AbortAndReturn` if that's not possible.
 
-        :param int number: How many attempts remain. Will always be
+        :param int attempts_remaining: How many attempts remain. Will always be
           at least 1.
         """
 
@@ -332,6 +357,37 @@ class TransactionLoop(object):
         .. versionadded:: 3.0
         """
 
+    _statsd_client = _statsd_client
+
+    class _StatCollector(object):
+        # Encapsulates the calls we make to send stats.
+        __slots__ = ('client', 'rate', 'buf')
+        def __init__(self, client, rate):
+            self.client = client
+            self.rate = rate
+            # We will always send at least two stats, so we can save some network traffic
+            # using a buffer. We shouldn't ever send enough to overflow a UDP packet
+            # (based on napkin math)
+            self.buf = []
+
+        def __call__(self, name, count=1):
+            self.client.incr(name, count=count, buf=self.buf, rate=self.rate)
+
+        def flush(self):
+            self.client.sendbuf(self.buf)
+            del self.buf
+
+    class _NullStatCollector(object):
+        @staticmethod
+        def __call__(name, count=1):
+            "Does nothing"
+
+        @staticmethod
+        def flush():
+            "Does nothing"
+
+    _null_stat_collector = _NullStatCollector()
+
     def __call__(self, *args, **kwargs):
         note = self.describe_transaction(*args, **kwargs)
 
@@ -345,15 +401,27 @@ class TransactionLoop(object):
         # our local Transaction object and the global state.
         was_explicit = txm.explicit
         txm.explicit = True
+        client = self._statsd_client()
+        stats = (
+            self._StatCollector(client, self.transaction_sample_rate)
+            if client
+            else self._null_stat_collector
+        )
 
         try:
             self.setUp()
-            return self.__loop(txm, note, args, kwargs)
+            return self.__loop(txm, note, stats, args, kwargs)
+        except Exception:
+            stats('transaction.failed')
+            stats('transaction.retry', self.attempts - 1)
+            raise
         finally:
             txm.explicit = was_explicit
             self.tearDown()
+            stats.flush()
 
-    def __loop(self, txm, note, args, kwargs): # pylint:disable=too-many-branches
+    def __loop(self, txm, note, stats, args, kwargs):
+        # pylint:disable=too-many-branches,too-many-statements
         attempts_remaining = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
@@ -411,13 +479,17 @@ class TransactionLoop(object):
                     # NOTE: We raise these as an exception instead
                     # of aborting in the loop so that we don't
                     # retry if something goes wrong aborting
+                    stats('transaction.side_effect_free')
                     raise self.AbortAndReturn(result, "side-effect free")
 
                 if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):
+                    stats('transaction.doomed' if tx.isDoomed() else 'transaction.vetoed')
                     raise self.AbortAndReturn(result, "doomed or vetoed")
 
                 _do_commit(tx, note, self.long_commit_duration)
-
+                stats('transaction.successful')
+                if attempts_remaining != self.attempts - 1:
+                    stats('transaction.retry', self.attempts - 1 - attempts_remaining)
                 return result
             except ForeignTransactionError:
                 # They left a transaction hanging around. If it's
@@ -506,7 +578,7 @@ class TransactionLoop(object):
             retryable = self._retryable(tx, exc_info)
             self._abort_on_exception(exc_info, retryable, attempts_remaining, tx)
 
-            if attempts_remaining <= 0 or not retryable: # AFTER the abort
+            if attempts_remaining <= 0 or not retryable:
                 _reraise(*exc_info)
         finally:
             exc_info = None
