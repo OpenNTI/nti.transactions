@@ -33,6 +33,9 @@
   of retries taken and the amount of time spent sleeping. See `issue
   32 <https://github.com/NextThought/nti.transactions/issues/32>`_.
 
+- Make the transaction loop emit events (using ``zope.event``) at certain parts of the
+  transaction lifecycle. See `issue 33 <https://github.com/NextThought/nti.transactions/issues/33>`_.
+
 3.0.0 (2019-09-06)
 ==================
 

@@ -33,11 +33,18 @@ from perfmetrics import statsd_client as _statsd_client
 from zope.exceptions.exceptionformatter import format_exception
 from zope.exceptions.exceptionformatter import print_exception
 from zope.cachedescriptors.property import Lazy
+from zope.event import notify
 
 from .interfaces import CommitFailedError
 from .interfaces import AbortFailedError
 from .interfaces import ForeignTransactionError
 from .interfaces import TransactionLifecycleError
+
+from .interfaces import LoopInvocation
+from .interfaces import AfterTransactionBegan
+from .interfaces import WillFirstAttempt
+from .interfaces import WillRetryAttempt
+from .interfaces import WillSleepBetweenAttempts
 
 import transaction
 
@@ -107,7 +114,8 @@ class TransactionLoop(object):
     commit is vetoed by :meth:`should_abort_due_to_no_side_effects` or
     :meth:`should_veto_commit` is never retried.
 
-    Running the loop will increment these :mod:`perfmetrics` counters:
+    Running the loop will increment these :mod:`perfmetrics` counters
+    (new in 3.1):
 
     transaction.retry
         The number of retries required in any given loop. Note that
@@ -143,6 +151,16 @@ class TransactionLoop(object):
        :exc:`transaction.interfaces.NoTransaction`,
        :exc:`transaction.interfaces.AlreadyInTransaction` or
        :exc:`nti.transactions.interfaces.TransactionLifecycleError`.
+
+    .. versionchanged:: 3.1
+
+       zope.event is used to publish events after each transaction begins,
+       before a transaction is retried or the first attempt is made,
+       and before we sleep between retries. See
+       :class:`nti.transaction.interfaces.IAfterTransactionBegan`,
+       :class:`nti.transaction.interfaces.IWillFirstAttempt`,
+       :class:`nti.transaction.interfaces.IWillRetryAttempt`,
+       :class:`nti.transaction.interfaces.IWillSleepBetweenAttempt`.
     """
 
     class AbortAndReturn(Exception):
@@ -222,7 +240,7 @@ class TransactionLoop(object):
           at least 1.
         :param tx: The transaction that's just begun.
 
-        .. versionchanged:: 3.0
+        .. versionchanged:: 3.1
            Add the *tx* parameter.
         """
 
@@ -444,7 +462,7 @@ class TransactionLoop(object):
         begin = txm.begin
         unused_descr = self._UNUSED_DESCRIPTION
         sleep_time = 0
-
+        invocation = LoopInvocation(self, self.handler, args, kwargs)
         while attempts_remaining:
             attempts_remaining -= 1
             # Starting at 0 for convenience
@@ -455,11 +473,15 @@ class TransactionLoop(object):
             tx = begin()
             if note and note is not unused_descr:
                 tx.note(note)
+            notify(AfterTransactionBegan(invocation, tx))
 
             try:
                 if need_retry:
                     self.prep_for_retry(attempts_remaining, tx, *args, **kwargs)
 
+                notify((WillFirstAttempt if not attempt_number else WillRetryAttempt)(
+                    invocation, tx, attempt_number
+                ))
                 result = self.run_handler(*args, **kwargs)
 
                 # If the application called commit() or abort(), this will return None
@@ -558,7 +580,7 @@ class TransactionLoop(object):
                 tx.nti_abort()
                 return e.response
             except Exception: # pylint:disable=broad-except
-                sleep_time += self.__handle_generic_exception(tx, attempts_remaining)
+                sleep_time += self.__handle_generic_exception(tx, attempts_remaining, invocation)
             except SystemExit:
                 self.__handle_exit(tx)
                 raise # pragma: no cover
@@ -586,7 +608,7 @@ class TransactionLoop(object):
         except NoTransaction:
             return None
 
-    def __handle_generic_exception(self, tx, attempts_remaining,
+    def __handle_generic_exception(self, tx, attempts_remaining, invocation,
                                    _reraise=six.reraise, _exc_info=sys.exc_info):
         # The code in the transaction package checks the retryable state
         # BEFORE aborting the current transaction. This matters because
@@ -608,6 +630,9 @@ class TransactionLoop(object):
             attempt_num = self.attempts - attempts_remaining # starting at 1
             backoff = self.random.randint(0, 2 ** attempt_num - 1)
             sleep_time = self.sleep * backoff
+            event = WillSleepBetweenAttempts(invocation, sleep_time)
+            notify(event)
+            sleep_time = event.sleep_time
             self._sleep(sleep_time) # pylint:disable=too-many-function-args
         else:
             sleep_time = 0

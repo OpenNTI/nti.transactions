@@ -8,6 +8,8 @@ from __future__ import print_function, absolute_import, division
 import sys
 import unittest
 
+import zope.event
+
 from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import calling
@@ -16,6 +18,7 @@ from hamcrest import has_property
 from hamcrest import none
 from hamcrest import has_items
 from hamcrest import greater_than_or_equal_to
+from hamcrest import contains
 
 import fudge
 
@@ -27,6 +30,10 @@ from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
 from ..interfaces import ForeignTransactionError
 from ..interfaces import TransactionLifecycleError
+from ..interfaces import AfterTransactionBegan
+from ..interfaces import WillFirstAttempt
+from ..interfaces import WillRetryAttempt
+from ..interfaces import WillSleepBetweenAttempts
 
 from ..loop import _do_commit
 from ..loop import TransactionLoop
@@ -126,9 +133,12 @@ class TestLoop(unittest.TestCase):
         self.statsd_client = TrueStatsDClient()
         self.statsd_client.random = lambda: 0 # Ignore rate, capture all packets
         statsd_client_stack.push(self.statsd_client)
+        self.events = []
+        zope.event.subscribers.append(self.events.append)
 
     def tearDown(self):
         statsd_client_stack.pop()
+        zope.event.subscribers.remove(self.events.append)
 
     def test_trivial(self):
         result = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)(1)
@@ -137,6 +147,9 @@ class TestLoop(unittest.TestCase):
         assert_that(self.statsd_client.packets, has_length(greater_than_or_equal_to(1)))
         assert_that(self.statsd_client.observations[-1],
                     is_counter(name='transaction.successful', value=1))
+
+        assert_that(self.events, has_length(2))
+        assert_that(self.events, contains(is_(AfterTransactionBegan), is_(WillFirstAttempt)))
 
     def test_explicit(self):
         assert_that(transaction.manager, has_property('explicit', is_false()))
@@ -293,6 +306,12 @@ class TestLoop(unittest.TestCase):
         assert_that(loop, has_property('times',
                                        times))
 
+        assert_that(self.events, has_length(29))
+
+        assert_that(self.events[-1], is_(WillRetryAttempt))
+        assert_that(self.events[-2], is_(AfterTransactionBegan))
+        assert_that(self.events[-3], is_(WillSleepBetweenAttempts))
+        assert_that(self.events[-3], has_property('sleep_time', 3.1))
 
     @fudge.patch('transaction._manager.TransactionManager.begin',
                  'transaction._manager.TransactionManager.get')
