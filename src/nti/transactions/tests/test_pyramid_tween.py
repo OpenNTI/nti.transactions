@@ -12,14 +12,17 @@ import unittest
 
 from pyramid.config import Configurator
 from zope.component import getGlobalSiteManager
+from transaction.interfaces import TransientError
 
 from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import none
+from hamcrest import has_entries
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
 from nti.testing.matchers import has_attr
+from nti.testing.matchers import has_length
 
 from .. import pyramid_tween
 from .._httpexceptions import HTTPBadRequest
@@ -121,6 +124,68 @@ class TestTransactionTween(unittest.TestCase):
     def _makeOne(self, handler=lambda request: MockResponse()):
         return pyramid_tween.TransactionTween(handler)
 
+    def test_retry_attempts_in_environ(self):
+        environs = []
+        def handler(request):
+            environs.append(request.environ.copy())
+            raise TransientError
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        try:
+            loop(req)
+        except TransientError:
+            pass
+        assert_that(environs, has_length(3))
+        assert_that(environs[0], has_entries('retry.attempt', 0,
+                                             'retry.attempts', 3))
+        assert_that(environs[1], has_entries('retry.attempt', 1,
+                                             'retry.attempts', 3))
+        assert_that(environs[2], has_entries('retry.attempt', 2,
+                                             'retry.attempts', 3))
+
+    def test_is_last(self):
+        is_lasts = []
+        def handler(request):
+            is_lasts.append(pyramid_tween.is_last_attempt(request))
+            raise TransientError
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        try:
+            loop(req)
+        except TransientError:
+            pass
+        assert_that(is_lasts, has_length(3))
+        assert_that(is_lasts, is_([False, False, True]))
+
+    def test_is_retryable_true(self):
+        is_retryable = []
+        def handler(request):
+            is_retryable.append(pyramid_tween.is_error_retryable(request, TransientError()))
+            raise TransientError
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        try:
+            loop(req)
+        except TransientError:
+            pass
+        assert_that(is_retryable, has_length(3))
+        assert_that(is_retryable, is_([True, True, False]))
+
+    def test_is_retryable_false(self):
+        is_retryable = []
+        def handler(request):
+            is_retryable.append(pyramid_tween.is_error_retryable(request, Exception()))
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        loop(req)
+        assert_that(is_retryable, has_length(1))
+        assert_that(is_retryable, is_([False]))
+
+
     def test_prep_for_retry_abort_on_IOError(self):
         loop = self._makeOne()
         class Request(MockRequest):
@@ -128,7 +193,7 @@ class TestTransactionTween(unittest.TestCase):
                 raise IOError
 
         with self.assertRaises(loop.AbortAndReturn) as exc:
-            loop.prep_for_retry(None, Request())
+            loop.prep_for_retry(None, None, Request())
 
         assert_that(exc.exception.response, is_(HTTPBadRequest))
 
