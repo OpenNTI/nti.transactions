@@ -12,6 +12,8 @@ TESTS_REQUIRE = [
     'fudge',
     'nti.testing',
     'pylint',
+    'pyramid',
+    'zope.component',
     'zope.testrunner',
 ]
 
@@ -66,6 +68,9 @@ setup(
             'repoze.sphinx.autointerface',
             'pyhamcrest',
             'sphinx_rtd_theme',
+        ],
+        'pyramid': [
+            'pyramid >= 1.2',
         ],
     },
     entry_points=entry_points

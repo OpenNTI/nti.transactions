@@ -15,6 +15,8 @@
   and in 5.0 they will be removed.
 
 - Add a Pyramid tween to manage transactions and transaction retries.
+  Various settings can be configured as Pyramid deployment settings
+  (e.g., in the ini file).
 
 - Make the transaction loop increase the time it sleeps between
   retries following the `random binary exponential backoff algorithm

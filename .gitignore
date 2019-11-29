@@ -6,6 +6,7 @@
 *.pyc
 *.sublime-*
 .coverage
+.coverage.*
 htmlcov/
 bin/
 develop-eggs/

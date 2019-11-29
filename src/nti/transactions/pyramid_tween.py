@@ -243,10 +243,44 @@ class TransactionTween(TransactionLoop):
             raise result
         return result
 
-def transaction_tween_factory(handler, registry): # pylint:disable=unused-argument
+def transaction_tween_factory(handler, registry):
     """
     The factory to create the tween.
 
+    The *registry* argument from Pyramid is used to access the
+    Pyramid "deployment settings" to configure the behaviour
+    of the transaction loop. The following settings are used.
+
+    retry.attempts
+        Int. The number of retry attempts. See :attr:`.TransactionLoop.attempts`
+        for the default.
+    retry.long_commit_duration
+        Float. The number of seconds after which a commit will be considered
+        "too long" and a warning logging message issued. See
+        :attr:`.TransactionLoop.long_commit_duration` for the default.
+    retry.sleep_ms
+        Int. The base number of **milliseconds** to sleep between retry attempts.
+        See :attr:`.TransactionLoop.sleep` for more documentation.
+
     See :class:`TransactionTween`
     """
-    return TransactionTween(handler)
+    settings = registry.settings
+    def setting(name, converter):
+        v = settings.get(name, None)
+        if v is not None:
+            v = converter(v)
+        return v
+
+    attempts = setting('retry.attempts', int)
+    retries = attempts - 1 if attempts else None
+
+    sleep_ms = setting('retry.sleep_ms', int)
+    sleep = sleep_ms / 1000 if sleep_ms else None
+
+    long_commit_duration = setting('retry.long_commit_duration', float)
+
+
+    return TransactionTween(handler,
+                            retries=retries,
+                            sleep=sleep,
+                            long_commit_duration=long_commit_duration)
