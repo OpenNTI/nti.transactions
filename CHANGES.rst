@@ -9,6 +9,12 @@
 - Fix logging of long duration commits. See `issue 44
   <https://github.com/NextThought/nti.transactions/issues/44>`_.
 
+- Add logging and a metric
+  (``transaction.side_effect_free_violation``) for transactions that
+  claim to have no side effects, but which actually result in joined
+  resource managers. This can indicate unnecessarily throwing away
+  work. See `issue 45 <https://github.com/NextThought/nti.transactions/issues/45>`_.
+
 
 3.1.0 (2019-11-29)
 ==================

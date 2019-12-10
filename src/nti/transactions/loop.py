@@ -131,6 +131,10 @@ class TransactionLoop(object):
         be inflated.
     transaction.side_effect_free
         How many side-effect free transactions there have been.
+    transaction.side_effect_free_violation
+        How many side-effect free transactions actually had resource
+        managers joined to the transaction, and so potentially aborted
+        work that wanted to be committed. (3.1.1)
     transaction.vetoed
         How many transactions were vetoed.
     transaction.doomed
@@ -530,6 +534,17 @@ class TransactionLoop(object):
                     # of aborting in the loop so that we don't
                     # retry if something goes wrong aborting
                     stats('transaction.side_effect_free')
+                    # Detect if we are potentially throwing away work. The transaction
+                    # was nominally side-effect free, but resource managers
+                    # joined it, so they probably want to do work.
+                    # This uses transaction internals, and we don't do a three-arg
+                    # getattr(); we want to break if they change
+                    if tx._resources:
+                        stats('transaction.side_effect_free_violation')
+                        logger.info(
+                            "Transaction %r nominally side-effect free has resource managers %r",
+                            tx, tx._resources
+                        )
                     raise self.AbortAndReturn(result, "side-effect free")
 
                 if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):

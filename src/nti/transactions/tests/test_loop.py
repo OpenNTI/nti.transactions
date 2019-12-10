@@ -13,6 +13,7 @@ import zope.event
 
 from hamcrest import assert_that
 from hamcrest import is_
+from hamcrest import is_not as does_not
 from hamcrest import calling
 from hamcrest import raises
 from hamcrest import has_property
@@ -379,6 +380,7 @@ class TestLoop(unittest.TestCase):
     def test_abort_no_side_effect(self, fake_begin, fake_get):
         fake_tx = fudge.Fake()
         fake_tx.expects('nti_abort')
+        fake_tx.has_attr(_resources=())
 
         fake_begin.expects_call().returns(fake_tx)
         fake_get.expects_call().returns(fake_tx)
@@ -393,6 +395,32 @@ class TestLoop(unittest.TestCase):
         assert_that(observations,
                     has_items(
                         is_counter(name='transaction.side_effect_free', value=1)))
+        assert_that(observations,
+                    does_not(
+                        has_items(
+                            is_counter(name='transaction.side_effect_free_violation')
+                        )))
+
+    @fudge.test
+    def test_abort_no_side_effect_violation(self):
+        fake_manager = fudge.Fake().is_a_stub()
+
+        class Loop(TransactionLoop):
+            side_effect_free = True
+
+        def handler():
+            transaction.get().join(fake_manager)
+
+        loop = Loop(handler)
+        loop()
+        observations = self.statsd_client.observations
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.side_effect_free', value=1)))
+        assert_that(observations,
+                    has_items(
+                        is_counter(name='transaction.side_effect_free_violation', value=1)
+                    ))
 
     @fudge.patch('transaction._transaction.Transaction.nti_abort')
     def test_abort_doomed(self, fake_abort):
