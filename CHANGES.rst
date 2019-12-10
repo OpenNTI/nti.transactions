@@ -6,7 +6,8 @@
 3.1.1 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Fix logging of long duration commits. See `issue 44
+  <https://github.com/NextThought/nti.transactions/issues/44>`_.
 
 
 3.1.0 (2019-11-29)

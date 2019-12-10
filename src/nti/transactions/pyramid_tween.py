@@ -151,10 +151,6 @@ class TransactionTween(TransactionLoop):
     and :func:`is_error_retryable` can be used to influence handler behaviour.
     """
 
-    # TODO: Take the number of attempts, sleep delay,
-    # delay backoff time/multiplier, long_commit_duration and
-    # side_effect_free as config params. Maybe model on pyramid_tm?
-
     def prep_for_retry(self, attempts_remaining, tx, request): # pylint:disable=arguments-differ
         """
         Prepares the request for possible retries.

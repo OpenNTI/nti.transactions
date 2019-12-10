@@ -59,7 +59,7 @@ __all__ = [
 
 logger = getLogger(__name__)
 
-def _do_commit(tx, description, long_commit_duration,
+def _do_commit(tx, long_commit_duration,
                retries, sleep_time,
                _logger=logger,
                _DEBUG=DEBUG,
@@ -76,8 +76,8 @@ def _do_commit(tx, description, long_commit_duration,
         if _logger.isEnabledFor(level):
             _logger.log(
                 level,
-                "Committed transaction description=%s, duration=%s, retries=%s, sleep_time=%s",
-                description, duration, retries, sleep_time
+                "Committed transaction description=%r, duration=%s, retries=%s, sleep_time=%s",
+                tx.description, duration, retries, sleep_time
             )
     except TypeError:
         # Translate this into something meaningful
@@ -113,6 +113,14 @@ class TransactionLoop(object):
     attempt to commit or abort it. A doomed transaction, or one whose
     commit is vetoed by :meth:`should_abort_due_to_no_side_effects` or
     :meth:`should_veto_commit` is never retried.
+
+    Aborting or committing the transaction will set these :mod:`perfmetrics`
+    timers:
+
+    transaction.commit
+        Time taken to commit the transaction. Sampled.
+    transaction.abort
+        Time taken to abort the transaction. Sampled.
 
     Running the loop will increment these :mod:`perfmetrics` counters
     (new in 3.1):
@@ -215,7 +223,7 @@ class TransactionLoop(object):
             long_commit_duration=None, # type: float
     ):
         """
-        :keyword float sleep: Sets the :attr:`initial_retry_delay`.
+        :keyword float sleep: Sets the :attr:`sleep`.
         :keyword int retries: If given, the number of times a transaction will be
             retried. Note that this is one less than the total number of
             :attr:`attempts`
@@ -528,7 +536,12 @@ class TransactionLoop(object):
                     stats('transaction.doomed' if tx.isDoomed() else 'transaction.vetoed')
                     raise self.AbortAndReturn(result, "doomed or vetoed")
 
-                _do_commit(tx, note, attempt_number, sleep_time, self.long_commit_duration)
+                _do_commit(
+                    tx,
+                    self.long_commit_duration,
+                    attempt_number,
+                    sleep_time,
+                )
                 stats('transaction.successful')
                 if attempt_number:
                     stats('transaction.retry', self.attempts - 1 - attempts_remaining)

@@ -5,6 +5,7 @@ from __future__ import print_function, absolute_import, division
 
 # pylint:disable=too-many-public-methods
 
+import logging
 import sys
 import unittest
 
@@ -49,13 +50,17 @@ from perfmetrics import statsd_client_stack
 
 
 class TestCommit(unittest.TestCase):
-    class RaisingCommit(object):
-        def __init__(self, t=Exception):
+    class Transaction(object):
+        description = u''
+        def __init__(self, t=None):
             self.t = t
 
         def nti_commit(self):
             if self.t:
                 raise self.t
+
+    def RaisingCommit(self, t=Exception):
+        return self.Transaction(t)
 
     def test_commit_raises_type_error_raises_commit_failed(self):
         assert_that(calling(_do_commit)
@@ -74,7 +79,7 @@ class TestCommit(unittest.TestCase):
                     raises(CommitFailedError, "A custom message"))
 
 
-    @fudge.patch('nti.transactions.transactions.logger.exception')
+    @fudge.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_assertion_error(self, fake_logger):
         fake_logger.expects_call()
 
@@ -84,7 +89,7 @@ class TestCommit(unittest.TestCase):
                     ),
                     raises(AssertionError))
 
-    @fudge.patch('nti.transactions.transactions.logger.exception')
+    @fudge.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_value_error(self, fake_logger):
         fake_logger.expects_call()
 
@@ -95,7 +100,7 @@ class TestCommit(unittest.TestCase):
                     ),
                     raises(ValueError))
 
-    @fudge.patch('nti.transactions.transactions.logger.exception')
+    @fudge.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_custom_error(self, fake_logger):
         fake_logger.expects_call()
 
@@ -115,13 +120,38 @@ class TestCommit(unittest.TestCase):
     @fudge.patch('nti.transactions.loop.logger.log')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
-        _do_commit(self.RaisingCommit(None), '', -1, 0, 0)
+        _do_commit(self.RaisingCommit(None), -1, 0, 0)
+
+
+    @fudge.patch('nti.transactions.loop.logger.isEnabledFor',
+                 'nti.transactions.loop.logger.log')
+    def test_commit_duration_logging_short(self, fake_is_enabled, fake_log):
+        fake_is_enabled.expects_call().returns(True).with_args(logging.DEBUG)
+        fake_log.expects_call()
+        _do_commit(self.Transaction(), 6, 0, 0)
+
+    @fudge.patch('nti.transactions.loop.logger.isEnabledFor',
+                 'nti.transactions.loop.logger.log')
+    def test_commit_duration_logging_long(self, fake_is_enabled, fake_log):
+        fake_is_enabled.expects_call().returns(True).with_args(logging.WARNING)
+        fake_log.expects_call()
+        fake_perf_counter = fudge.Fake(
+        ).expects_call(
+        ).returns(
+            0
+        ).next_call(
+        ).returns(
+            10
+        )
+        _do_commit(self.Transaction(), 6, 0, 0, _perf_counter=fake_perf_counter)
+
 
 class TrueStatsDClient(FakeStatsDClient):
     # https://github.com/zodb/perfmetrics/issues/23
     def __bool__(self):
         return True
     __nonzero__ = __bool__
+
 
 class TestLoop(unittest.TestCase):
 
@@ -140,8 +170,21 @@ class TestLoop(unittest.TestCase):
         statsd_client_stack.pop()
         zope.event.subscribers.remove(self.events.append)
 
-    def test_trivial(self):
-        result = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)(1)
+    @fudge.patch('nti.transactions.loop._do_commit')
+    def test_trivial(self, fake_commit):
+        class Any(object):
+            def __eq__(self, other):
+                return True
+
+        loop = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)
+        fake_commit.expects_call().with_args(
+            Any(), # transaction
+            loop.long_commit_duration,
+            0, # attempt number / retries
+            0 # sleep_time
+        )
+
+        result = loop(1)
         assert_that(result, is_(1))
         # May or may not get a transaction.commit stat first, depending on random
         assert_that(self.statsd_client.packets, has_length(greater_than_or_equal_to(1)))
@@ -389,13 +432,15 @@ class TestLoop(unittest.TestCase):
                     has_items(
                         is_counter(name='transaction.vetoed', value=1)))
 
-    @fudge.patch('transaction._manager.TransactionManager.begin')
-    def test_abort_systemexit(self, fake_begin):
+    @fudge.patch('transaction._manager.TransactionManager.begin',
+                 'sys.stderr')
+    def test_abort_systemexit(self, fake_begin, fake_stderr):
         fake_tx = fudge.Fake()
         fake_tx.expects('abort').raises(ValueError)
         fake_tx.provides('isDoomed').returns(False)
 
         fake_begin.expects_call().returns(fake_tx)
+        fake_stderr.provides('write')
 
         def handler():
             raise SystemExit()
