@@ -3,7 +3,7 @@
  Changes
 =========
 
-3.1.1 (unreleased)
+3.1.1 (2019-12-10)
 ==================
 
 - Fix logging of long duration commits. See `issue 44
