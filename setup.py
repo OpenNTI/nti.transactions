@@ -9,6 +9,7 @@ entry_points = {
 }
 
 TESTS_REQUIRE = [
+    'coverage',
     'fudge',
     'nti.testing',
     'pylint',

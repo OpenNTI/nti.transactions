@@ -57,7 +57,7 @@ class TestCommit(unittest.TestCase):
 
         def nti_commit(self):
             if self.t:
-                raise self.t
+                raise self.t # (Python2, old pylint)  pylint:disable=raising-bad-type
 
     def RaisingCommit(self, t=Exception):
         return self.Transaction(t)
