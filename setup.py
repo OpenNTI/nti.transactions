@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-version = '3.1.2.dev0'
+version = '4.0.0.dev0'
 
 entry_points = {
     'console_scripts': [
@@ -53,10 +53,9 @@ setup(
     namespace_packages=['nti'],
     tests_require=TESTS_REQUIRE,
     install_requires=[
-        'dm.transaction.aborthook',
         'perfmetrics',
         'setuptools',
-        'transaction >= 2.4.0',
+        'transaction >= 3.0.0',
         'zope.cachedescriptors',
         'zope.exceptions',
         'zope.interface',

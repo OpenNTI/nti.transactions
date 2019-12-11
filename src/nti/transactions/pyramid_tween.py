@@ -42,7 +42,7 @@ logger = __import__('logging').getLogger(__name__)
 from nti.transactions._httpexceptions import HTTPBadRequest
 from nti.transactions._httpexceptions import HTTPException
 from nti.transactions._loglevels import TRACE
-from nti.transactions.transactions import TransactionLoop
+from nti.transactions.loop import TransactionLoop
 
 __all__ = [
     'commit_veto',

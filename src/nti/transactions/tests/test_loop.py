@@ -481,8 +481,8 @@ class TestLoop(unittest.TestCase):
             pass
 
     @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'nti.transactions.transactions.logger.exception',
-                 'nti.transactions.transactions.logger.warning')
+                 'nti.transactions.loop.logger.exception',
+                 'nti.transactions.loop.logger.warning')
     def test_abort_exception_raises(self, fake_begin,
                                     fake_logger, fake_format):
         # begin() returns an object without abort(), which we catch.
