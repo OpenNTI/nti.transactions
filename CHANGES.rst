@@ -3,10 +3,13 @@
  Changes
 =========
 
-3.1.2 (unreleased)
+4.0.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Require at least version 3.0 of the ``transaction`` package.
+
+- Drop dependency on the ``dm.transaction.aborthook`` package. That
+  functionality is now natively provided in transaction 3.0.
 
 
 3.1.1 (2019-12-10)
