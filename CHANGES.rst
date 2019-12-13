@@ -3,7 +3,7 @@
  Changes
 =========
 
-4.0.0 (unreleased)
+4.0.0 (2019-12-13)
 ==================
 
 - Require at least version 3.0 of the ``transaction`` package.
