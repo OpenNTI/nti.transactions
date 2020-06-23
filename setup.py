@@ -59,6 +59,7 @@ setup(
         'zope.cachedescriptors',
         'zope.exceptions',
         'zope.interface',
+        'zope.event',
     ],
     extras_require={
         'test': TESTS_REQUIRE,

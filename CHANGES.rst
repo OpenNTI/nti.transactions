@@ -6,7 +6,7 @@
 4.0.1 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add missing dependency on zope.event.
 
 
 4.0.0 (2019-12-13)
