@@ -7,7 +7,10 @@
 ==================
 
 - Add missing dependency on zope.event.
-
+- Fix raising ``AlreadyInTransaction`` error on the second and
+  subsequent calls to a loop when a transaction synchronizer raises an
+  error on the first call. See `issue 49
+  <https://github.com/NextThought/nti.transactions/issues/49>`_.
 
 4.0.0 (2019-12-13)
 ==================

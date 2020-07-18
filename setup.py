@@ -16,6 +16,7 @@ TESTS_REQUIRE = [
     'pyramid',
     'zope.component',
     'zope.testrunner',
+    'ZODB',
 ]
 
 def _read(fname):
