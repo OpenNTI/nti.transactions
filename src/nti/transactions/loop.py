@@ -467,6 +467,19 @@ class TransactionLoop(object):
             self.tearDown()
             stats.flush()
 
+    def on_begin_failed(self, exc_info, txm, args, kwargs):
+        """
+        Called when ``begin()`` raised an error other than
+        ``AlreadyInTransaction``, probably due to a bad synchronizer.
+        Subclasses may override this method.
+
+        After this is called, the tranasction manager *txm* will be aborted.
+
+        This method must not raise an exception.
+
+        .. versionadded:: 4.0.1
+        """
+
     def __loop(self, txm, note, stats, args, kwargs):
         # pylint:disable=too-many-branches,too-many-statements,too-many-locals
         attempts_remaining = self.attempts
@@ -482,7 +495,27 @@ class TransactionLoop(object):
             # Throw away any previous exceptions our loop raised.
             # The TB could be taking lots of memory
             exc_clear()
-            tx = begin()
+            # Bad synchronizers could cause this to raise.
+            # That's not good.
+            try:
+                tx = begin()
+            except AlreadyInTransaction: # pragma: no cover
+                raise
+            except:
+                self.on_begin_failed(sys.exc_info(), txm, args, kwargs)
+
+                try:
+                    txm.abort()
+                except Exception: # pylint:disable=broad-except
+                    logger.exception(
+                        "Failure when aborting transaction, after failure to begin transaction. "
+                        "This exception will be suppressed in favor of the beginning exception "
+                        "on Python 3; on Python 2, the beginning exception will be suppressed "
+                        "in favor of this one."
+                    )
+
+                raise
+
             if note and note is not unused_descr:
                 tx.note(note)
             notify(AfterTransactionBegan(invocation, tx))

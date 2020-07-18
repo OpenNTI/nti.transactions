@@ -8,6 +8,7 @@
 .coverage
 .coverage.*
 htmlcov/
+coverage.xml
 bin/
 develop-eggs/
 dist/

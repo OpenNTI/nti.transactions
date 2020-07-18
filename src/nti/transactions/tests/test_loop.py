@@ -49,6 +49,25 @@ from perfmetrics.testing import FakeStatsDClient
 from perfmetrics.testing.matchers import is_counter
 from perfmetrics import statsd_client_stack
 
+from ZODB import DB
+from ZODB.DemoStorage import DemoStorage
+from ZODB.POSException import StorageError
+
+
+if str is bytes:
+    # The Python 2 version of hamcrest has a bug
+    # where it assumes the mismatch_description is
+    # not None in one branch.
+    from hamcrest.core.core.allof import AllOf
+    from hamcrest.core.string_description import StringDescription
+    old_func = AllOf.matches.__func__
+    def matches(self, item, mismatch_description=None):
+        if mismatch_description is None:
+            mismatch_description = StringDescription()
+        return old_func(self, item, mismatch_description)
+
+    AllOf.matches = matches
+
 
 class TestCommit(unittest.TestCase):
     class Transaction(object):
@@ -161,6 +180,7 @@ class TestLoop(unittest.TestCase):
             transaction.abort()
         except NoTransaction:
             pass
+        transaction.manager.clearSynchs()
         self.statsd_client = TrueStatsDClient()
         self.statsd_client.random = lambda: 0 # Ignore rate, capture all packets
         statsd_client_stack.push(self.statsd_client)
@@ -170,6 +190,7 @@ class TestLoop(unittest.TestCase):
     def tearDown(self):
         statsd_client_stack.pop()
         zope.event.subscribers.remove(self.events.append)
+        transaction.manager.clearSynchs()
 
     @fudge.patch('nti.transactions.loop._do_commit')
     def test_trivial(self, fake_commit):
@@ -204,6 +225,75 @@ class TestLoop(unittest.TestCase):
 
         result = TransactionLoop(handler)()
         assert_that(result, is_(42))
+
+    def test_synchronizer_raises_error_on_begin(self):
+        class SynchError(Exception):
+            pass
+
+        class Synch(object):
+            count = 0
+            def newTransaction(self, _txn):
+                self.count += 1
+                if self.count == 1:
+                    raise SynchError
+
+
+            def afterCompletion(self, _txm):
+                pass
+
+            beforeCompletion = afterCompletion
+
+
+        synch = Synch()
+        transaction.manager.registerSynch(synch)
+
+        class HandlerError(Exception):
+            pass
+
+        def handler():
+            raise HandlerError
+
+        # Doing it the first time fails
+        loop = TransactionLoop(handler)
+        with self.assertRaises(SynchError):
+            loop()
+
+        # Our synch doesn't raise the second time,
+        # and we don't get AlreadyInTransaction.
+        with self.assertRaises(HandlerError):
+            loop()
+
+    def test_zodb_synchronizer_raises_error_on_begin(self):
+        # Closely mimic what we see in
+        # https://github.com/NextThought/nti.transactions/issues/49,
+        # where the storage's ``pollInvalidations`` method
+        # raises errors.
+        db = DB(DemoStorage())
+        # The connection has to be open to register a synch
+        conn = db.open()
+
+        def bad_poll_invalidations():
+            raise StorageError
+
+        conn._storage.poll_invalidations = bad_poll_invalidations
+
+        # For the fun of it, lets assume that afterCompletion is also broken
+        class CompletionError(Exception):
+            pass
+        def bad_afterCompletion():
+            raise CompletionError
+        conn._storage.afterCompletion = bad_afterCompletion
+
+        def handler():
+            self.fail("Never get here")
+
+        loop = TransactionLoop(handler)
+
+        # Python 2 and Python 3 raise different things
+        expected = StorageError if str is not bytes else CompletionError
+        for _ in range(2):
+            with self.assertRaises(expected):
+                loop()
 
     def test_explicit_begin(self):
         def handler():

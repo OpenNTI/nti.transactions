@@ -10,7 +10,7 @@ from __future__ import print_function
 
 try:
     from ZODB.loglevels import TRACE
-except ImportError:
+except ImportError: # pragma: no cover
     TRACE = 5
 
 __all__ = [

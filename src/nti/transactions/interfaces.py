@@ -15,6 +15,8 @@ from transaction.interfaces import TransactionError
 from transaction.interfaces import ITransaction
 
 # pylint:disable=no-method-argument,inherit-non-class
+# Sigh. The Python 2 version of pylint raises this.
+# pylint:disable=too-many-ancestors
 
 class IExtendedTransaction(ITransaction):
     """Extensions to the transaction api."""
