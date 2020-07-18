@@ -3,7 +3,7 @@
  Changes
 =========
 
-4.0.1 (unreleased)
+4.0.1 (2020-07-18)
 ==================
 
 - Add missing dependency on zope.event.
