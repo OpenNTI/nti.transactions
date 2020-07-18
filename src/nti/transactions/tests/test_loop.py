@@ -49,6 +49,11 @@ from perfmetrics.testing import FakeStatsDClient
 from perfmetrics.testing.matchers import is_counter
 from perfmetrics import statsd_client_stack
 
+from ZODB import DB
+from ZODB.DemoStorage import DemoStorage
+from ZODB.POSException import StorageError
+
+
 if str is bytes:
     # The Python 2 version of hamcrest has a bug
     # where it assumes the mismatch_description is
@@ -263,11 +268,6 @@ class TestLoop(unittest.TestCase):
         # https://github.com/NextThought/nti.transactions/issues/49,
         # where the storage's ``pollInvalidations`` method
         # raises errors.
-        # pylint:disable=import-outside-toplevel
-        from ZODB import DB
-        from ZODB.DemoStorage import DemoStorage
-        from ZODB.POSException import StorageError
-
         db = DB(DemoStorage())
         # The connection has to be open to register a synch
         conn = db.open()
