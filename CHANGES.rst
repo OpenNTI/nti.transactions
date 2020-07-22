@@ -3,7 +3,7 @@
  Changes
 =========
 
-4.2.0 (unreleased)
+4.1.0 (unreleased)
 ==================
 
 - Add logging to the pyramid tween transaction factory to show the
