@@ -21,6 +21,7 @@ from hamcrest import none
 from hamcrest import has_items
 from hamcrest import greater_than_or_equal_to
 from hamcrest import contains
+from hamcrest import contains_string
 
 import fudge
 
@@ -199,6 +200,10 @@ class TestLoop(unittest.TestCase):
                 return True
 
         loop = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)
+        r = repr(loop)
+        assert_that(r, contains_string('sleep=1'))
+        assert_that(r, contains_string('long_commit_duration=1'))
+        assert_that(r, contains_string('attempts=2'))
         fake_commit.expects_call().with_args(
             Any(), # transaction
             loop.long_commit_duration,
@@ -511,6 +516,25 @@ class TestLoop(unittest.TestCase):
                     has_items(
                         is_counter(name='transaction.side_effect_free_violation', value=1)
                     ))
+
+        loop.side_effect_free_log_level = logging.ERROR
+        with self.assertRaises(TransactionLifecycleError) as exc:
+            loop()
+
+        ex = exc.exception
+        assert_that(str(ex),
+                    is_("Transaction that was supposed to be side-effect free "
+                        "had resource managers [fake:fake_manager]."))
+
+        loop.side_effect_free_resource_report_limit = 0
+        with self.assertRaises(TransactionLifecycleError) as exc:
+            loop()
+
+        ex = exc.exception
+        assert_that(str(ex),
+                    is_("Transaction that was supposed to be side-effect free "
+                        "had resource managers (count=1)."))
+
 
     @fudge.patch('transaction._transaction.Transaction.nti_abort')
     def test_abort_doomed(self, fake_abort):
