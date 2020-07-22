@@ -372,3 +372,5 @@ autodoc_default_options = {
     'members': True,
     'show-inheritance': True,
 }
+autodoc_member_order = 'groupwise'
+autodoc_content = 'both'

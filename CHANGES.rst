@@ -3,10 +3,15 @@
  Changes
 =========
 
-4.0.2 (unreleased)
+4.2.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add logging to the pyramid tween transaction factory to show the
+  settings that are in use.
+- Add ``TransactionLoop.side_effect_free_log_level``, and change the
+  default value to DEBUG. It is useful to set this to ERROR or higher
+  in tests.
+- Add ``TransactionLoop.side_effect_free_resource_limit``.
 
 
 4.0.1 (2020-07-18)

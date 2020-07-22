@@ -29,8 +29,11 @@ Install this tween using the ``add_tween`` method::
         under=pyramid.tweens.EXCVIEW)
 
 You may install it under or over the exception view, depending on whether you
-need the transaction to be open
+need the transaction to be active in exception views.
 
+If you have a tween that manages a ZODB connection, it should be installed
+*above* this tween. That's because ZODB connections cannot be closed while
+joined to a transaction; the transaction must be committed or aborted first.
 """
 
 from __future__ import print_function
@@ -317,7 +320,9 @@ def transaction_tween_factory(handler, registry):
     long_commit_duration = setting('retry.long_commit_duration', float)
 
 
-    return TransactionTween(handler,
-                            retries=retries,
-                            sleep=sleep,
-                            long_commit_duration=long_commit_duration)
+    tween = TransactionTween(handler,
+                             retries=retries,
+                             sleep=sleep,
+                             long_commit_duration=long_commit_duration)
+    logger.info("Created tween %s", tween)
+    return tween

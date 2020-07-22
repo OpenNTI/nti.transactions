@@ -14,6 +14,7 @@ __docformat__ = "restructuredtext en"
 
 from logging import DEBUG
 from logging import WARNING
+from logging import ERROR
 from logging import getLogger
 
 import sys
@@ -220,6 +221,23 @@ class TransactionLoop(object):
     #: as an instance variable.
     side_effect_free = False
 
+    #: If the number of resources joined to a transaction exceeds this,
+    #: only a summary will be logged.
+    #:
+    #: .. versionadded:: 4.1.0
+    side_effect_free_resource_report_limit = 5
+
+    #: The log level at which to report violations of side-effect-free transactions
+    #: (those that are reported as :meth:`should_abort_due_to_no_side_effects`,
+    #: but which nonetheless have resource managers joined). This usually signifies
+    #: a programming error, and results in throwing away work.
+    #: If this is set to :obj:`logging.ERROR` or higher, an exception will be
+    #: raised when this happens; this is useful for testing.
+    #: The default value is :obj:`logging.DEBUG`.
+    #:
+    #: .. versionadded:: 4.1.0
+    side_effect_free_log_level = DEBUG
+
     def __init__(
             self, handler,
             retries=None, # type: int
@@ -240,6 +258,17 @@ class TransactionLoop(object):
         if sleep is not None:
             self.sleep = sleep
             self.random = random.SystemRandom()
+
+    def __repr__(self):
+        return '<%s.%s at 0x%x attempts=%s long_commit_duration=%s sleep=%s handler=%r>' % (
+            type(self).__module__,
+            type(self).__name__,
+            id(self),
+            self.attempts,
+            self.long_commit_duration,
+            self.sleep,
+            self.handler
+        )
 
     def prep_for_retry(self, attempts_remaining, tx, *args, **kwargs):
         """
@@ -561,7 +590,8 @@ class TransactionLoop(object):
                     # ignored, reducing contention on commit
                     # locks, if any resources had actually been
                     # joined (ZODB Connection only joins when it
-                    # detects a write).
+                    # detects a write, but those can later be undone by setting
+                    # _p_changed = False; this doesn't un-join the transaction).
 
                     # NOTE: We raise these as an exception instead
                     # of aborting in the loop so that we don't
@@ -571,13 +601,34 @@ class TransactionLoop(object):
                     # was nominally side-effect free, but resource managers
                     # joined it, so they probably want to do work.
                     # This uses transaction internals, and we don't do a three-arg
-                    # getattr(); we want to break if they change
-                    if tx._resources:
-                        stats('transaction.side_effect_free_violation')
-                        logger.info(
-                            "Transaction %r nominally side-effect free has resource managers %r",
-                            tx, tx._resources
+                    # getattr(); we want to break if they change.
+                    # The list of joined resource managers may be very long
+                    # in some cases and it's not always useful to print
+                    # all of them.
+                    resources = tx._resources or ()
+
+                    if resources:
+                        resources = (
+                            '(count=%d)' % len(resources)
+                            if len(resources) > self.side_effect_free_resource_report_limit
+                            else resources
                         )
+
+                        stats('transaction.side_effect_free_violation')
+                        logger.log(
+                            self.side_effect_free_log_level,
+                            "Transaction %r nominally side-effect free has resource managers %s.",
+                            tx, resources
+                        )
+                        if self.side_effect_free_log_level >= ERROR:
+                            # Need to grab a copy of `resources` because this will clear it.
+                            if not isinstance(resources, str):
+                                resources = repr(resources)
+                            self.__abort_transaction_quietly(tx)
+                            raise TransactionLifecycleError(
+                                "Transaction that was supposed to be side-effect free had "
+                                "resource managers %s." % (resources,)
+                            )
                     raise self.AbortAndReturn(result, "side-effect free")
 
                 if tx.isDoomed() or self.should_veto_commit(result, *args, **kwargs):
