@@ -43,10 +43,10 @@ disable=wrong-import-position,
     cyclic-import,
     too-many-arguments,
     redefined-builtin,
-	useless-suppression,
-	mixed-indentation,
+    useless-suppression,
     useless-object-inheritance,
-    super-with-arguments
+    super-with-arguments,
+    bad-option-value
 #	undefined-all-variable
 
 

@@ -18,12 +18,15 @@ from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import none
 from hamcrest import has_entries
+from hamcrest import contains_exactly
 from hamcrest import is_not as does_not
+from hamcrest import same_instance
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
 from nti.testing.matchers import has_attr
 from nti.testing.matchers import has_length
+from nti.testing.matchers import validly_provides
 
 from .. import pyramid_tween
 from .._httpexceptions import HTTPBadRequest
@@ -180,6 +183,96 @@ class TestTransactionTween(unittest.TestCase):
                                              'retry.attempts', 3))
         assert_that(environs[2], has_entries('retry.attempt', 2,
                                              'retry.attempts', 3))
+
+    def test_retry_attempts_events(self):
+        # pylint:disable=import-outside-toplevel
+        # pylint:disable=too-many-locals
+        from zope.event import subscribers
+
+        from nti.transactions.interfaces import IAfterTransactionBegan
+        from nti.transactions.interfaces import IWillFirstAttempt
+        from nti.transactions.interfaces import IWillRetryAttempt
+        from nti.transactions.interfaces import IWillLastAttempt
+
+        from nti.transactions.interfaces import AfterTransactionBegan
+        from nti.transactions.interfaces import WillFirstAttempt
+        from nti.transactions.interfaces import WillRetryAttempt
+        from nti.transactions.interfaces import WillLastAttempt
+
+        from nti.transactions.interfaces import IWillFirstAttemptWithRequest
+        from nti.transactions.interfaces import IWillRetryAttemptWithRequest
+        from nti.transactions.interfaces import IWillLastAttemptWithRequest
+
+        from nti.transactions.interfaces import WillFirstAttemptWithRequest
+        from nti.transactions.interfaces import WillRetryAttemptWithRequest
+        from nti.transactions.interfaces import WillLastAttemptWithRequest
+
+        events = []
+        subscribers.append(events.append)
+        self.addCleanup(subscribers.remove, events.append)
+
+        calls = []
+        def handler(_):
+            calls.append(1)
+            raise TransientError
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        try:
+            loop(req)
+        except TransientError:
+            pass
+        assert_that(calls, has_length(3))
+
+        assert_that(events, has_length(6))
+        assert_that(events, contains_exactly(
+            is_(AfterTransactionBegan),
+            is_(WillFirstAttempt),
+
+            is_(AfterTransactionBegan),
+            is_(WillRetryAttempt),
+
+            is_(AfterTransactionBegan),
+            is_(WillLastAttempt),
+        ))
+
+        assert_that(events, contains_exactly(
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillFirstAttempt),
+
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillRetryAttempt),
+
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillLastAttempt),
+        ))
+
+        assert_that(events, contains_exactly(
+            is_(AfterTransactionBegan),
+            is_(WillFirstAttemptWithRequest),
+
+            is_(AfterTransactionBegan),
+            is_(WillRetryAttemptWithRequest),
+
+            is_(AfterTransactionBegan),
+            is_(WillLastAttemptWithRequest),
+        ))
+
+        assert_that(events, contains_exactly(
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillFirstAttemptWithRequest),
+
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillRetryAttemptWithRequest),
+
+            validly_provides(IAfterTransactionBegan),
+            validly_provides(IWillLastAttemptWithRequest),
+        ))
+
+        for i in (1, 3, 5):
+            assert_that(events[i], has_attr(
+                'request',
+                is_(same_instance(req))))
 
     def test_is_last(self):
         is_lasts = []
