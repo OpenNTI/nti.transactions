@@ -8,6 +8,11 @@
 
 - Add support for Python 3.9.
 - Move CI from Travis CI to Github Actions.
+- When the Pyramid tween retries, any volatile attributes (those
+  beginning with ``_v_``) in the request dictionary are deleted. This
+  is inspired by ``persistent`` and meant to facilitate safe caching.
+  When compared to events sent by the transaction loop, there is no
+  specified order. See `issue 54 <https://github.com/NextThought/nti.transactions/issues/54>`_.
 
 
 4.1.0 (2020-07-22)

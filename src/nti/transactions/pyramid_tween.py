@@ -170,8 +170,17 @@ class TransactionTween(TransactionLoop):
 
         .. caution::
             This doesn't do anything with the WSGI
-            environment or request object; changes to those persist
+            environment; changes to that persist
             between retries.
+
+        .. versionchanged:: 4.2.0
+           Now, transient attributes of the request object (those whose
+           name begins with ``_v_``) are deleted by this function before
+           it returns for the second and susquent attempts.
+           Previously, there were left with their existing values.
+           This is intended to make request-specific caching easier,
+           following a similar model as :mod:`persistent` and allowing for
+           common patterns such as :class:`zope.cachedescriptors.property.Lazy`.
         """
         # make_body_seekable will copy wsgi.input if necessary,
         # otherwise it will rewind the copy to position zero
@@ -230,6 +239,13 @@ class TransactionTween(TransactionLoop):
                 # encoded data will never start with these values, they would be
                 # escaped. so this must be meant to be JSON
                 request.content_type = 'application/json'
+        if attempt_number > 0:
+            # We are making a retry. We need to reset transient state.
+            for attr_name in list(attr_name
+                                  for attr_name
+                                  in vars(request)
+                                  if attr_name.startswith('_v_')):
+                delattr(request, attr_name)
 
     def should_abort_due_to_no_side_effects(self, request): # pylint:disable=arguments-differ
         """
@@ -246,7 +262,7 @@ class TransactionTween(TransactionLoop):
         """
         Tests with :func:`commit_veto`.
         """
-        return  commit_veto(request, response)
+        return commit_veto(request, response)
 
     def describe_transaction(self, request): # pylint:disable=arguments-differ
         return request.path_info
@@ -273,13 +289,13 @@ class TransactionTween(TransactionLoop):
             # Of course, this is only needed if the exception was actually
             # raised, not deliberately returned (commonly HTTPFound and the like
             # are returned)...raising those could have unintended consequences
-            request._nti_raised_exception = True
+            request._v_nti_raised_exception = True
             return e
 
     def __call__(self, request): # pylint:disable=arguments-differ
         result = TransactionLoop.__call__(self, request)  # not super() for speed
         if  isinstance(result, HTTPException) and \
-            getattr(request, '_nti_raised_exception', False):
+            getattr(request, '_v_nti_raised_exception', False):
             raise result
         return result
 
