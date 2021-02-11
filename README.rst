@@ -8,8 +8,8 @@
 .. image:: https://coveralls.io/repos/github/NextThought/nti.transactions/badge.svg?branch=master
 	:target: https://coveralls.io/github/NextThought/nti.transactions?branch=master
 
-.. image:: https://travis-ci.org/NextThought/nti.transactions.svg?branch=master
-    :target: https://travis-ci.org/NextThought/nti.transactions
+.. image:: https://github.com/NextThought/nti.transactions/workflows/tests/badge.svg
+   :target: https://github.com/NextThought/nti.transactions/actions?query=workflow%3Atests
 
 .. image:: https://readthedocs.org/projects/ntitransactions/badge/?version=latest
    :target: https://ntitransactions.readthedocs.io/en/latest/?badge=latest

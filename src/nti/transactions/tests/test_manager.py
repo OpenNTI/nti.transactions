@@ -51,7 +51,7 @@ class TestObjectDataManager(AbstractTestBase):
     def test_callable_name(self):
         class X(object):
             def thing(self):
-                pass
+                "Does nothing"
 
         x = X()
         odm = do(target=x, method_name='thing')

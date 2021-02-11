@@ -25,6 +25,9 @@
 # If your documentation needs a minimal Sphinx version, state it here.
 #
 # needs_sphinx = '1.0'
+# 1.8 was the last version that runs on Python 2; 2.0+ requires Python 3.
+# `autodoc_default_options` was new in 1.8
+needs_sphinx = "1.8"
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -368,9 +371,13 @@ extlinks = {'issue': ('https://github.com/NextThought/nti.transactions/issues/%s
             'pr': ('https://github.com/NextThought/nti.transactions/pull/%s',
                    'pull request #')}
 
+# Sphinx 1.8+ prefers this to `autodoc_default_flags`. It's documented that
+# either True or None mean the same thing as just setting the flag, but
+# only None works in 1.8 (True works in 2.0)
 autodoc_default_options = {
-    'members': True,
-    'show-inheritance': True,
+    'members': None,
+    'show-inheritance': None,
 }
 autodoc_member_order = 'groupwise'
 autodoc_content = 'both'
+autoclass_content = 'both'

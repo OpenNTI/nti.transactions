@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-version = '4.1.1.dev0'
+version = '4.2.0.dev0'
 
 entry_points = {
     'console_scripts': [
@@ -44,6 +44,8 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
@@ -66,7 +68,9 @@ setup(
         'test': TESTS_REQUIRE,
         'gevent': ['gevent',],
         'docs': [
-            'Sphinx >= 2.1.2',
+            'Sphinx >= 2.1.2; python_version >= "3.0"',
+            # Sphinx 2+ does not support Python 2.7.
+            'Sphinx >= 1.8.5; python_version == "2.7"',
             'repoze.sphinx.autointerface',
             'pyhamcrest',
             'sphinx_rtd_theme',

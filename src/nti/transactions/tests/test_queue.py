@@ -15,8 +15,7 @@ import transaction
 import six
 
 try:
-    from gevent.queue import Full
-    from gevent.queue import Queue
+    from gevent import queue as gevent_queue
 except ImportError:
     if six.PY2:
         from Queue import Full
@@ -24,6 +23,9 @@ except ImportError:
     else:
         from queue import Full
         from queue import Queue
+else: # pragma: no cover
+    Full = gevent_queue.Full
+    Queue = gevent_queue.Queue
 
 from ..queue import put_nowait
 

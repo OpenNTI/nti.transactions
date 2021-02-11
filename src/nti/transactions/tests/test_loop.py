@@ -179,7 +179,7 @@ class TestLoop(unittest.TestCase):
     def setUp(self):
         try:
             transaction.abort()
-        except NoTransaction:
+        except NoTransaction: # pragma: no cover
             pass
         transaction.manager.clearSynchs()
         self.statsd_client = TrueStatsDClient()
@@ -290,7 +290,7 @@ class TestLoop(unittest.TestCase):
         conn._storage.afterCompletion = bad_afterCompletion
 
         def handler():
-            self.fail("Never get here")
+            self.fail("Never get here") # pragma: no cover
 
         loop = TransactionLoop(handler)
 
@@ -590,7 +590,7 @@ class TestLoop(unittest.TestCase):
         loop = TransactionLoop(handler)
         try:
             loop()
-            self.fail("Should raise SystemExit")
+            self.fail("Should raise SystemExit") # pragma: no cover
         except SystemExit:
             pass
 
