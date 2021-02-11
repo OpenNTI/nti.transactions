@@ -11,3 +11,4 @@ include *.txt
 
 recursive-include docs *.py *.rst
 recursive-include src *.zcml *.py
+recursive-include .github *.yml

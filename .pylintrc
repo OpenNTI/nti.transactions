@@ -45,7 +45,8 @@ disable=wrong-import-position,
     redefined-builtin,
 	useless-suppression,
 	mixed-indentation,
-    useless-object-inheritance
+    useless-object-inheritance,
+    super-with-arguments
 #	undefined-all-variable
 
 

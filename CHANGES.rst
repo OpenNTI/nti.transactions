@@ -3,10 +3,11 @@
  Changes
 =========
 
-4.1.1 (unreleased)
+4.2.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.9.
+- Move CI from Travis CI to Github Actions.
 
 
 4.1.0 (2020-07-22)
