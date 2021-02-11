@@ -18,6 +18,7 @@ from hamcrest import assert_that
 from hamcrest import is_
 from hamcrest import none
 from hamcrest import has_entries
+from hamcrest import is_not as does_not
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
@@ -144,6 +145,42 @@ class TestTransactionTween(unittest.TestCase):
         assert_that(environs[2], has_entries('retry.attempt', 2,
                                              'retry.attempts', 3))
 
+    def test_retry_attempts_reset_v_props(self):
+        environs = []
+        def handler(request):
+            if not environs:
+                # First time in.
+                request._non_transient_private = 42
+                request.non_transient_public = 24
+                # It wasn't reset before beginning
+                assert_that(request, has_attr('_v_from_before', 36))
+                del request._v_from_before
+            environs.append(request.environ.copy())
+            assert_that(request, does_not(has_attr('_v_foo1')))
+            assert_that(request, does_not(has_attr('_v_foo2')))
+            assert_that(request, does_not(has_attr('_v_from_before')))
+            assert_that(request, has_attr('_non_transient_private', 42))
+            assert_that(request, has_attr('non_transient_public', 24))
+            request._v_foo1 = 1
+            request._v_foo2 = 2
+
+            raise TransientError
+
+        loop = self._makeOne(handler)
+        req = MockRequest()
+        req._v_from_before = 36 # pylint:disable=attribute-defined-outside-init
+        try:
+            loop(req)
+        except TransientError:
+            pass
+        assert_that(environs, has_length(3))
+        assert_that(environs[0], has_entries('retry.attempt', 0,
+                                             'retry.attempts', 3))
+        assert_that(environs[1], has_entries('retry.attempt', 1,
+                                             'retry.attempts', 3))
+        assert_that(environs[2], has_entries('retry.attempt', 2,
+                                             'retry.attempts', 3))
+
     def test_is_last(self):
         is_lasts = []
         def handler(request):
@@ -241,7 +278,7 @@ class TestTransactionTween(unittest.TestCase):
         req = MockRequest()
         res = loop.run_handler(req)
 
-        assert_that(req, has_attr('_nti_raised_exception'))
+        assert_that(req, has_attr('_v_nti_raised_exception', True))
         assert_that(res, is_(HTTPBadRequest))
 
     def test_run_handler_throws(self):
