@@ -28,6 +28,7 @@ import fudge
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
 from nti.testing.matchers import has_length
+from nti.testing.matchers import validly_provides
 
 from ..interfaces import CommitFailedError
 from ..interfaces import AbortFailedError
@@ -37,6 +38,9 @@ from ..interfaces import AfterTransactionBegan
 from ..interfaces import WillFirstAttempt
 from ..interfaces import WillRetryAttempt
 from ..interfaces import WillSleepBetweenAttempts
+from ..interfaces import IAfterTransactionBegan
+from ..interfaces import IWillRetryAttempt
+from ..interfaces import IWillSleepBetweenAttempts
 
 from ..loop import _do_commit
 from ..loop import TransactionLoop
@@ -450,6 +454,10 @@ class TestLoop(unittest.TestCase):
         assert_that(self.events[-1], is_(WillRetryAttempt))
         assert_that(self.events[-2], is_(AfterTransactionBegan))
         assert_that(self.events[-3], is_(WillSleepBetweenAttempts))
+        assert_that(self.events[-1], validly_provides(IWillRetryAttempt))
+        assert_that(self.events[-2], validly_provides(IAfterTransactionBegan))
+        assert_that(self.events[-3], validly_provides(IWillSleepBetweenAttempts))
+
         assert_that(self.events[-3], has_property('sleep_time', 3.1))
 
     @fudge.patch('transaction._manager.TransactionManager.begin',

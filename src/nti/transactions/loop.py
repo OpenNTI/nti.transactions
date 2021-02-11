@@ -45,6 +45,7 @@ from .interfaces import LoopInvocation
 from .interfaces import AfterTransactionBegan
 from .interfaces import WillFirstAttempt
 from .interfaces import WillRetryAttempt
+from .interfaces import WillLastAttempt
 from .interfaces import WillSleepBetweenAttempts
 
 import transaction
@@ -509,6 +510,23 @@ class TransactionLoop(object):
         .. versionadded:: 4.0.1
         """
 
+    #: The event to send before running the handler the first time.
+    #: Subclasses may override.
+    #:
+    #: ..versionadded:: 4.2.0
+    EVT_WILL_FIRST_ATTEMPT = WillFirstAttempt
+    #: The event to send before running the handler the second time,
+    #: up until the last time.
+    #: Subclasses may override.
+    #:
+    #: ..versionadded:: 4.2.0
+    EVT_WILL_RETRY_ATTEMPT = WillRetryAttempt
+    #: The event to send before running the handler the last time.
+    #: Subclasses may override.
+    #:
+    #: ..versionadded:: 4.2.0
+    EVT_WILL_LAST_ATTEMPT = WillLastAttempt
+
     def __loop(self, txm, note, stats, args, kwargs):
         # pylint:disable=too-many-branches,too-many-statements,too-many-locals
         attempts_remaining = self.attempts
@@ -553,9 +571,15 @@ class TransactionLoop(object):
                 if need_retry:
                     self.prep_for_retry(attempts_remaining, tx, *args, **kwargs)
 
-                notify((WillFirstAttempt if not attempt_number else WillRetryAttempt)(
-                    invocation, tx, attempt_number
-                ))
+                if not attempt_number:
+                    evt_kind = self.EVT_WILL_FIRST_ATTEMPT
+                else:
+                    evt_kind = (self.EVT_WILL_RETRY_ATTEMPT
+                                if attempts_remaining
+                                else self.EVT_WILL_LAST_ATTEMPT)
+
+                notify(evt_kind(invocation, tx, attempt_number))
+
                 result = self.run_handler(*args, **kwargs)
 
                 # If the application called commit() or abort(), this will return None

@@ -89,8 +89,17 @@ class ILoopInvocation(Interface):
 class ILoopEvent(Interface):
     """
     Base class for event loop events.
+
+    The *handler_args* and *handler_kwargs* should not
+    be mutated in place or assigned to. These are a convenience
+    for accessing the attributes of the *invocation* attribute.
+
+    .. versionchanged:: 4.2.0
+       Add the *handler_args* and *handler_kwargs*.
     """
     invocation = Attribute("An ILoopInvocation.")
+    handler_args = Attribute("The positional arguments for the handler, or ()")
+    handler_kwargs = Attribute("The keyword arguments for the handler, or {}")
 
 class IAfterTransactionBegan(ILoopEvent):
     """
@@ -119,6 +128,11 @@ class IWillRetryAttempt(IWillAttemptTransaction):
     A retry attempt.
     """
 
+class IWillLastAttempt(IWillRetryAttempt):
+    """
+    The final retry.
+    """
+
 class IWillSleepBetweenAttempts(ILoopEvent):
     """
     Will sleep between attempts.
@@ -126,9 +140,34 @@ class IWillSleepBetweenAttempts(ILoopEvent):
     If the ``sleep_time`` attribute is modified,
     that will be the time slept.
     """
-
     sleep_time = Attribute("The time to sleep.")
 
+
+class IWillFirstAttemptWithRequest(IWillFirstAttempt):
+    """
+    The first attempt, but with a request object.
+
+    .. versionadded:: 4.2.0
+    """
+    request = Attribute("The request object that will be used.")
+
+
+class IWillRetryAttemptWithRequest(IWillRetryAttempt):
+    """
+    A retry attempt with a request object.
+
+    .. versionadded:: 4.2.0
+    """
+    request = Attribute("The request object that will be used.")
+
+
+class IWillLastAttemptWithRequest(IWillLastAttempt):
+    """
+    The final retry with a request object.
+
+    .. versionadded:: 4.2.0
+    """
+    request = Attribute("The request object that will be used.")
 
 @implementer(ILoopInvocation)
 class LoopInvocation(object):
@@ -140,11 +179,20 @@ class LoopInvocation(object):
         self.args = args
         self.kwargs = kwargs
 
+
 @implementer(ILoopEvent)
 class LoopEvent(object):
     __slots__ = ('invocation',)
     def __init__(self, invocation):
         self.invocation = invocation
+
+    @property
+    def handler_args(self):
+        return self.invocation.args
+
+    @property
+    def handler_kwargs(self):
+        return self.invocation.kwargs
 
 @implementer(IAfterTransactionBegan)
 class AfterTransactionBegan(LoopEvent):
@@ -158,19 +206,42 @@ class WillAttemptTransaction(LoopEvent):
     __slots__ = ('tx', 'attempt_number')
     def __init__(self, invocation, tx, attempt_number):
         LoopEvent.__init__(self, invocation)
-        self.invocation = invocation
         self.tx = tx
         self.attempt_number = attempt_number
 
+@implementer(IWillFirstAttempt)
 class WillFirstAttempt(WillAttemptTransaction):
     __slots__ = ()
 
+@implementer(IWillRetryAttempt)
 class WillRetryAttempt(WillAttemptTransaction):
     __slots__ = ()
 
+@implementer(IWillLastAttempt)
+class WillLastAttempt(WillRetryAttempt):
+    __slots__ = ()
+
+@implementer(IWillSleepBetweenAttempts)
 class WillSleepBetweenAttempts(LoopEvent):
     __slots__ = ('sleep_time',)
 
     def __init__(self, invocation, sleep_time):
         LoopEvent.__init__(self, invocation)
         self.sleep_time = sleep_time
+
+class _RequestMixin(object):
+    @property
+    def request(self):
+        return self.handler_args[0]
+
+@implementer(IWillFirstAttemptWithRequest)
+class WillFirstAttemptWithRequest(WillFirstAttempt, _RequestMixin):
+    __slots__ = ()
+
+@implementer(IWillRetryAttemptWithRequest)
+class WillRetryAttemptWithRequest(WillRetryAttempt, _RequestMixin):
+    __slots__ = ()
+
+@implementer(IWillLastAttemptWithRequest)
+class WillLastAttemptWithRequest(WillLastAttempt, _RequestMixin):
+    __slots__ = ()

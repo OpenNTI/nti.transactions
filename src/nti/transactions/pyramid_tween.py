@@ -46,6 +46,9 @@ from nti.transactions._httpexceptions import HTTPBadRequest
 from nti.transactions._httpexceptions import HTTPException
 from nti.transactions._loglevels import TRACE
 from nti.transactions.loop import TransactionLoop
+from nti.transactions.interfaces import WillFirstAttemptWithRequest
+from nti.transactions.interfaces import WillRetryAttemptWithRequest
+from nti.transactions.interfaces import WillLastAttemptWithRequest
 
 __all__ = [
     'commit_veto',
@@ -152,7 +155,16 @@ class TransactionTween(TransactionLoop):
 
     When the request body is executing, the functions :func:`is_last_attempt`
     and :func:`is_error_retryable` can be used to influence handler behaviour.
+
+    .. versionchanged:: 4.2.0
+       For convenience, now emits :class:`nti.transactions.interfaces.IWillFirstAttemptWithRequest`,
+       and the other ``WithRequest`` events, instead of events without the
+       request object.
     """
+
+    EVT_WILL_FIRST_ATTEMPT = WillFirstAttemptWithRequest
+    EVT_WILL_RETRY_ATTEMPT = WillRetryAttemptWithRequest
+    EVT_WILL_LAST_ATTEMPT = WillLastAttemptWithRequest
 
     def prep_for_retry(self, attempts_remaining, tx, request): # pylint:disable=arguments-differ
         """

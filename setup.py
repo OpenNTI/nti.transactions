@@ -56,6 +56,7 @@ setup(
     namespace_packages=['nti'],
     tests_require=TESTS_REQUIRE,
     install_requires=[
+        'six',
         'perfmetrics',
         'setuptools',
         'transaction >= 3.0.0',

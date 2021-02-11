@@ -13,7 +13,15 @@
   is inspired by ``persistent`` and meant to facilitate safe caching.
   When compared to events sent by the transaction loop, there is no
   specified order. See `issue 54 <https://github.com/NextThought/nti.transactions/issues/54>`_.
-
+- Fix various event classes not properly specifying the interface they
+  implement. For example, ``WillFirstAttempt`` now properly implements
+  ``IWillFirstAttempt``, and ``WilLRetryAttempt`` now properly
+  implements ``IWillRetryAttempt``. See `issue 52
+  <https://github.com/NextThought/nti.transactions/issues/52>`_.
+- Add ``IWillLastAttempt`` as a subclass of ``IWillRetryAttempt`` and
+  the last event emitted.
+- The Pyramid tween now emits ``IWillRetryAttemptWithRequest``, et al,
+  to provide simple access to the request object.
 
 4.1.0 (2020-07-22)
 ==================
