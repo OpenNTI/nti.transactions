@@ -3,7 +3,7 @@
  Changes
 =========
 
-4.2.1 (unreleased)
+4.2.1 (2021-05-25)
 ==================
 
 - When aborting a transaction due to an exception, log the exception
