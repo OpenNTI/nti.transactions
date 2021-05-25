@@ -69,9 +69,9 @@ setup(
         'test': TESTS_REQUIRE,
         'gevent': ['gevent',],
         'docs': [
-            'Sphinx >= 2.1.2; python_version >= "3.0"',
-            # Sphinx 2+ does not support Python 2.7.
-            'Sphinx >= 1.8.5; python_version == "2.7"',
+            # Sphinx 4 and repoze.sphinx.autointerface 0.8
+            # are incompatible
+            'Sphinx < 4',
             'repoze.sphinx.autointerface',
             'pyhamcrest',
             'sphinx_rtd_theme',

@@ -6,7 +6,7 @@ from __future__ import print_function, absolute_import, division
 import unittest
 
 from hamcrest import assert_that
-from hamcrest import contains
+from hamcrest import contains_exactly as contains
 from hamcrest import calling
 from hamcrest import raises
 from hamcrest import is_

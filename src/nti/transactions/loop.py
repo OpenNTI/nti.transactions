@@ -329,7 +329,7 @@ class TransactionLoop(object):
     #: and applying the relevant test (which defaults to True)
     _retryable_errors = ()
 
-    def _retryable(self, tx, exc_info):
+    def _retryable(self, tx, exc_info): # pylint:disable=inconsistent-return-statements
         """
         Should the given exception info be considered one
         we should retry?
@@ -358,16 +358,21 @@ class TransactionLoop(object):
             del v
 
     def _abort_on_exception(self, exc_info, retryable, number, tx):
-        e = exc_info[0]
+        e = exc_info[0] # (t, v, tb)
+        # There can be lots of valuable information in the str of
+        # an exception instance. e.g., ZODB.POSException.ConflictError,
+        # when raised by ZODB.ConflictResolation, contains the class name
+        # and the OID involved, which is useful for tracking down
+        # hotspots.
         try:
             tx.nti_abort()
-            logger.debug("Transaction aborted; retrying %s/%s; '%s'/%r",
-                         retryable, number, e, e)
+            logger.debug("Transaction aborted; retrying %s/%s; %r: %s",
+                         retryable, number, e, exc_info[1])
         except (AttributeError, ValueError):
             try:
                 logger.exception("Failed to abort transaction following exception "
-                                 "(retrying %s/%s; '%s'/%r). New exception:",
-                                 retryable, number, e, e)
+                                 "(retrying %s/%s; %r: %s). New exception:",
+                                 retryable, number, e, exc_info[1])
             except:  # pylint:disable=I0011,W0702
                 pass
             # We've seen RelStorage do this:
