@@ -12,7 +12,8 @@
   possibly how to fix it for transient errors (e.g., a
   ``ZODB.POSException.ConflictError`` includes the object ID and
   class, which can be used to reduce the conflicts). This makes the
-  logging slightly more expensive (when enabled).
+  logging slightly more expensive (when enabled). See `PR 58
+  <https://github.com/NextThought/nti.transactions/pull/58>`_.
 
 
 4.2.0 (2021-02-11)
