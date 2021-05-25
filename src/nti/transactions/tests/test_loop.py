@@ -4,6 +4,7 @@
 from __future__ import print_function, absolute_import, division
 
 # pylint:disable=too-many-public-methods
+# pylint:disable=import-outside-toplevel
 
 import logging
 import sys
@@ -20,7 +21,7 @@ from hamcrest import has_property
 from hamcrest import none
 from hamcrest import has_items
 from hamcrest import greater_than_or_equal_to
-from hamcrest import contains
+from hamcrest import contains_exactly as contains
 from hamcrest import contains_string
 
 import fudge
@@ -74,7 +75,7 @@ if str is bytes:
     AllOf.matches = matches
 
 
-class TestCommit(unittest.TestCase):
+class Test_Do_Commit(unittest.TestCase):
     class Transaction(object):
         description = u''
         def __init__(self, t=None):
@@ -618,3 +619,45 @@ class TestLoop(unittest.TestCase):
             raise Exception()
         loop = TransactionLoop(handler)
         assert_that(calling(loop), raises(AbortFailedError))
+
+    def test_abort_on_exception_logs_exception_str(self):
+        from zope.testing.loggingsupport import InstalledHandler
+        from ZODB.POSException import ConflictError
+        import pickle
+        logs = InstalledHandler("nti.transactions.loop")
+        self.addCleanup(logs.uninstall)
+
+        loop = TransactionLoop(lambda: None)
+
+        pickle_data = pickle.dumps(type(self), 2)
+
+
+        exc_info = (
+            ConflictError,
+            # Provide the data that ZODB.ConflictResolution does
+            ConflictError(
+                oid=b'\x01' * 8,
+                serials=(b'\x02' * 8, b'\x01' * 8),
+                data=pickle_data
+            ),
+            None # Traceback not used
+        )
+
+        class Tx(object):
+            @staticmethod
+            def nti_abort():
+                "Does nothing"
+
+        loop._abort_on_exception(exc_info, True, 4, Tx)
+
+        self.assertEqual(len(logs.records), 1)
+        msg = logs.records[0].getMessage()
+        assert_that(msg, is_(
+            "Transaction aborted; "
+            "retrying True/4; "
+            "<class 'ZODB.POSException.ConflictError'>: database conflict error "
+            "(oid 0x0101010101010101, "
+            "class nti.transactions.tests.test_loop.TestLoop, "
+            "serial this txn started with 0x0101010101010101 1931-06-10 12:49:00.235294, "
+            "serial currently committed 0x0202020202020202 1962-11-20 01:38:00.470588)"
+        ))

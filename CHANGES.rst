@@ -6,7 +6,13 @@
 4.2.1 (unreleased)
 ==================
 
-- Nothing changed yet.
+- When aborting a transaction due to an exception, log the exception
+  instead of just the exception type (twice). Exception messages can
+  be very helpful in understanding exactly what went wrong and
+  possibly how to fix it for transient errors (e.g., a
+  ``ZODB.POSException.ConflictError`` includes the object ID and
+  class, which can be used to reduce the conflicts). This makes the
+  logging slightly more expensive (when enabled).
 
 
 4.2.0 (2021-02-11)
