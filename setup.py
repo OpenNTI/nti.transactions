@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-version = '4.3.0'
+version = '4.3.1.dev0'
 
 entry_points = {
     'console_scripts': [
