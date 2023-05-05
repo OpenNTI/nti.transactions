@@ -376,7 +376,9 @@ class TransactionLoop(object):
             except:  # pylint:disable=I0011,W0702
                 pass
             # We've seen RelStorage do this:
-            # relstorage.cache:427 in after_poll: AttributeError: 'int' object has no attribute 'split' which looks like
+            # relstorage.cache:427 in after_poll:
+            #    AttributeError: 'int' object has no attribute 'split'
+            # which looks like
             # an issue with how it stores checkpoints in memcache.
             # We have no idea what state it's in after that, so we should
             # abort.
@@ -393,7 +395,8 @@ class TransactionLoop(object):
             try:
                 if format_exception is not None:
                     fmt = format_exception(*exc_info)
-                    logger.warning("Failed to abort transaction following exception. Original exception:\n%s",
+                    logger.warning("Failed to abort transaction following exception. "
+                                   "Original exception:\n%s",
                                    '\n'.join(fmt))
             except: # pylint:disable=bare-except
                 exc_info = sys.exc_info()
@@ -533,7 +536,7 @@ class TransactionLoop(object):
     EVT_WILL_LAST_ATTEMPT = WillLastAttempt
 
     def __loop(self, txm, note, stats, args, kwargs):
-        # pylint:disable=too-many-branches,too-many-statements,too-many-locals
+        # pylint:disable=too-many-branches,too-many-statements,too-many-locals,too-complex
         attempts_remaining = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
@@ -634,6 +637,7 @@ class TransactionLoop(object):
                     # The list of joined resource managers may be very long
                     # in some cases and it's not always useful to print
                     # all of them.
+                    # pylint:disable=protected-access
                     resources = tx._resources or ()
 
                     if resources:
@@ -731,6 +735,7 @@ class TransactionLoop(object):
         self.__abort_transaction_quietly(txm)
         # Ensure we're in a clean state
         # even if abort failed.
+        # pylint:disable=protected-access
         txm._txn = None
 
     @staticmethod

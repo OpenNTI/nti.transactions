@@ -10,13 +10,13 @@ entry_points = {
 
 TESTS_REQUIRE = [
     'coverage',
-    'fudge',
     'nti.testing',
     'pylint',
     'pyramid',
     'zope.component',
     'zope.testrunner',
     'ZODB',
+    'mock; python_version == "2.7"',
 ]
 
 def _read(fname):
@@ -47,6 +47,8 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
@@ -70,12 +72,11 @@ setup(
         'test': TESTS_REQUIRE,
         'gevent': ['gevent',],
         'docs': [
-            # Sphinx 4 and repoze.sphinx.autointerface 0.8
-            # are incompatible
-            'Sphinx < 4',
+            'Sphinx',
             'repoze.sphinx.autointerface',
             'pyhamcrest',
-            'sphinx_rtd_theme',
+            'furo; python_version >= "3.6"',
+            'sphinx_rtd_theme; python_version < "3.6"',
         ],
         'pyramid': [
             'pyramid >= 1.2',

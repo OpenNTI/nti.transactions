@@ -99,7 +99,7 @@ def is_side_effect_free(request):
     polling (which does have side effects on GET requests), while
     still supporting serving the static resources of socket.io.
     """
-    if request.method == 'GET' or request.method == 'HEAD':
+    if request.method in ('GET', 'HEAD'):
         # GET/HEAD requests must NEVER have side effects.
         if 'socket.io' in request.url:
             # (Unfortunately, socket.io polling does)
@@ -239,6 +239,7 @@ class TransactionTween(TransactionLoop):
 
         # We attempt to fix that here. (This is the best place because
         # we are now sure the body is seekable.)
+        # pylint:disable-next=compare-to-zero
         if attempt_number == 0 \
            and request.method in ('POST', 'PUT') \
            and request.content_type == 'application/x-www-form-urlencoded':
@@ -301,7 +302,8 @@ class TransactionTween(TransactionLoop):
             # Of course, this is only needed if the exception was actually
             # raised, not deliberately returned (commonly HTTPFound and the like
             # are returned)...raising those could have unintended consequences
-            request._v_nti_raised_exception = True
+
+            request._v_nti_raised_exception = True # pylint:disable=protected-access
             return e
 
     def __call__(self, request): # pylint:disable=arguments-differ

@@ -24,7 +24,7 @@ from hamcrest import greater_than_or_equal_to
 from hamcrest import contains_exactly as contains
 from hamcrest import contains_string
 
-import fudge
+
 
 from nti.testing.matchers import is_true
 from nti.testing.matchers import is_false
@@ -59,6 +59,11 @@ from ZODB import DB
 from ZODB.DemoStorage import DemoStorage
 from ZODB.POSException import StorageError
 
+try:
+    from unittest import mock
+except ImportError:
+    import mock
+
 
 if str is bytes:
     # The Python 2 version of hamcrest has a bug
@@ -70,10 +75,12 @@ if str is bytes:
     def matches(self, item, mismatch_description=None):
         if mismatch_description is None:
             mismatch_description = StringDescription()
+        # pylint:disable-next=too-many-function-args
         return old_func(self, item, mismatch_description)
 
     AllOf.matches = matches
 
+# pylint:disable=protected-access,broad-exception-raised
 
 class Test_Do_Commit(unittest.TestCase):
     class Transaction(object):
@@ -105,17 +112,17 @@ class Test_Do_Commit(unittest.TestCase):
                     raises(CommitFailedError, "A custom message"))
 
 
-    @fudge.patch('nti.transactions.loop.logger.exception')
+    @mock.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_assertion_error(self, fake_logger):
-        fake_logger.expects_call()
-
         assert_that(calling(_do_commit)
                     .with_args(
                         self.RaisingCommit(AssertionError), '', 0, 0, 0
                     ),
                     raises(AssertionError))
+        fake_logger.assert_called_once()
 
-    @fudge.patch('nti.transactions.loop.logger.exception')
+
+    @mock.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_value_error(self, fake_logger):
         fake_logger.expects_call()
 
@@ -126,7 +133,7 @@ class Test_Do_Commit(unittest.TestCase):
                     ),
                     raises(ValueError))
 
-    @fudge.patch('nti.transactions.loop.logger.exception')
+    @mock.patch('nti.transactions.loop.logger.exception')
     def test_commit_raises_custom_error(self, fake_logger):
         fake_logger.expects_call()
 
@@ -143,34 +150,36 @@ class Test_Do_Commit(unittest.TestCase):
                         ),
                         raises(MyException))
 
-    @fudge.patch('nti.transactions.loop.logger.log')
+    @mock.patch('nti.transactions.loop.logger.log')
     def test_commit_clean_but_long(self, fake_logger):
         fake_logger.expects_call()
         _do_commit(self.RaisingCommit(None), -1, 0, 0)
 
 
-    @fudge.patch('nti.transactions.loop.logger.isEnabledFor',
-                 'nti.transactions.loop.logger.log')
+
+    @mock.patch('nti.transactions.loop.logger.log')
+    @mock.patch('nti.transactions.loop.logger.isEnabledFor')
     def test_commit_duration_logging_short(self, fake_is_enabled, fake_log):
-        fake_is_enabled.expects_call().returns(True).with_args(logging.DEBUG)
-        fake_log.expects_call()
+        def enabled(lvl):
+            return lvl == logging.DEBUG
+        fake_is_enabled.side_effect = enabled
+
         _do_commit(self.Transaction(), 6, 0, 0)
+        fake_log.assert_called_once()
 
-    @fudge.patch('nti.transactions.loop.logger.isEnabledFor',
-                 'nti.transactions.loop.logger.log')
+    @mock.patch('nti.transactions.loop.logger.log')
+    @mock.patch('nti.transactions.loop.logger.isEnabledFor')
     def test_commit_duration_logging_long(self, fake_is_enabled, fake_log):
-        fake_is_enabled.expects_call().returns(True).with_args(logging.WARNING)
-        fake_log.expects_call()
-        fake_perf_counter = fudge.Fake(
-        ).expects_call(
-        ).returns(
-            0
-        ).next_call(
-        ).returns(
-            10
-        )
+        def enabled(lvl):
+            return lvl == logging.WARNING
+        fake_is_enabled.side_effect = enabled
+        perfs = [10, 0]
+        def perf():
+            return perfs.pop()
+        fake_perf_counter = mock.MagicMock()
+        fake_perf_counter.side_effect = perf
         _do_commit(self.Transaction(), 6, 0, 0, _perf_counter=fake_perf_counter)
-
+        fake_log.assert_called_once()
 
 class TrueStatsDClient(FakeStatsDClient):
     # https://github.com/zodb/perfmetrics/issues/23
@@ -198,11 +207,13 @@ class TestLoop(unittest.TestCase):
         zope.event.subscribers.remove(self.events.append)
         transaction.manager.clearSynchs()
 
-    @fudge.patch('nti.transactions.loop._do_commit')
+    @mock.patch('nti.transactions.loop._do_commit')
     def test_trivial(self, fake_commit):
         class Any(object):
             def __eq__(self, other):
                 return True
+            def __hash__(self):
+                return 42
 
         loop = TransactionLoop(lambda a: a, retries=1, long_commit_duration=1, sleep=1)
         r = repr(loop)
@@ -350,6 +361,7 @@ class TestLoop(unittest.TestCase):
     def test_setup_teardown(self):
 
         class Loop(TransactionLoop):
+            # false positive pylint:disable=arguments-differ
             setupcalled = teardowncalled = False
             def setUp(self):
                 assert_that(transaction.manager, has_property('explicit', is_true()))
@@ -461,33 +473,33 @@ class TestLoop(unittest.TestCase):
 
         assert_that(self.events[-3], has_property('sleep_time', 3.1))
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'transaction._manager.TransactionManager.get')
+
+    @mock.patch('transaction._manager.TransactionManager.get', autospec=True)
+    @mock.patch('transaction._manager.TransactionManager.begin', autospec=True)
     def test_note(self, fake_begin, fake_get):
-        fake_tx = fudge.Fake()
-        (fake_tx
-         .expects('note').with_args(u'Hi')
-         .expects('nti_abort')
-         .provides('isDoomed').returns(True))
-        fake_begin.expects_call().returns(fake_tx)
-        fake_get.expects_call().returns(fake_tx)
+        fake_tx = mock.MagicMock()
+        fake_tx.isDoomed.return_value = True
+        fake_begin.return_value = fake_tx
+        fake_get.return_value = fake_tx
+
         class Loop(TransactionLoop):
             def describe_transaction(self, *args, **kwargs):
                 return u"Hi"
 
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
+        fake_tx.note.assert_called_with(u'Hi')
+        fake_tx.nti_abort.assert_called_once()
 
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'transaction._manager.TransactionManager.get')
-    def test_abort_no_side_effect(self, fake_begin, fake_get):
-        fake_tx = fudge.Fake()
-        fake_tx.expects('nti_abort')
-        fake_tx.has_attr(_resources=())
+    @mock.patch('transaction._manager.TransactionManager.begin', autospec=True)
+    @mock.patch('transaction._manager.TransactionManager.get', autospec=True)
+    def test_abort_no_side_effect(self, fake_get, fake_begin):
+        fake_tx = mock.MagicMock()
+        fake_tx._resources = () # pylint:disable=protected-access
 
-        fake_begin.expects_call().returns(fake_tx)
-        fake_get.expects_call().returns(fake_tx)
+        fake_begin.return_value = fake_tx
+        fake_get.return_value = fake_tx
 
 
         class Loop(TransactionLoop):
@@ -505,9 +517,15 @@ class TestLoop(unittest.TestCase):
                             is_counter(name='transaction.side_effect_free_violation')
                         )))
 
-    @fudge.test
+        fake_tx.nti_abort.assert_called_once()
+
     def test_abort_no_side_effect_violation(self):
-        fake_manager = fudge.Fake().is_a_stub()
+        class Mock(mock.MagicMock):
+            def __str__(self):
+                return 'fake:fake_manager'
+            __repr__ = __str__
+
+        fake_manager = Mock()
 
         class Loop(TransactionLoop):
             side_effect_free = True
@@ -545,7 +563,7 @@ class TestLoop(unittest.TestCase):
                         "had resource managers (count=1)."))
 
 
-    @fudge.patch('transaction._transaction.Transaction.nti_abort')
+    @mock.patch('transaction._transaction.Transaction.nti_abort')
     def test_abort_doomed(self, fake_abort):
         fake_abort.expects_call()
 
@@ -561,15 +579,15 @@ class TestLoop(unittest.TestCase):
                     has_items(
                         is_counter(name='transaction.doomed', value=1)))
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'transaction._manager.TransactionManager.get')
-    def test_abort_veto(self, fake_begin, fake_get):
-        fake_tx = fudge.Fake()
-        fake_tx.expects('nti_abort')
-        fake_tx.provides('isDoomed').returns(False)
 
-        fake_begin.expects_call().returns(fake_tx)
-        fake_get.expects_call().returns(fake_tx)
+    @mock.patch('transaction._manager.TransactionManager.get')
+    @mock.patch('transaction._manager.TransactionManager.begin')
+    def test_abort_veto(self, fake_begin, fake_get):
+        fake_tx = mock.MagicMock()
+        fake_tx.isDoomed.return_value = False
+
+        fake_begin.return_value = fake_tx
+        fake_get.return_value = fake_tx
 
         class Loop(TransactionLoop):
             def should_veto_commit(self, result, *args, **kwargs):
@@ -583,15 +601,17 @@ class TestLoop(unittest.TestCase):
                     has_items(
                         is_counter(name='transaction.vetoed', value=1)))
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'sys.stderr')
-    def test_abort_systemexit(self, fake_begin, fake_stderr):
-        fake_tx = fudge.Fake()
-        fake_tx.expects('abort').raises(ValueError)
-        fake_tx.provides('isDoomed').returns(False)
+        fake_tx.nti_abort.assert_called_once()
 
-        fake_begin.expects_call().returns(fake_tx)
-        fake_stderr.provides('write')
+
+    @mock.patch('transaction._manager.TransactionManager.begin', autospec=True)
+    @mock.patch('sys.stderr', autospec=True)
+    def test_abort_systemexit(self, fake_begin, _fake_stderr):
+        fake_tx = mock.MagicMock()
+        fake_tx.abort.side_effect = ValueError
+        fake_tx.isDoomed.return_value = False
+
+        fake_begin.return_value = fake_tx
 
         def handler():
             raise SystemExit()
@@ -603,22 +623,24 @@ class TestLoop(unittest.TestCase):
         except SystemExit:
             pass
 
-    @fudge.patch('transaction._manager.TransactionManager.begin',
-                 'nti.transactions.loop.logger.exception',
-                 'nti.transactions.loop.logger.warning')
-    def test_abort_exception_raises(self, fake_begin,
-                                    fake_logger, fake_format):
-        # begin() returns an object without abort(), which we catch.
-        fake_begin.expects_call().returns_fake()
 
+    @mock.patch('nti.transactions.loop.logger.exception', side_effect=ValueError)
+    @mock.patch('nti.transactions.loop.logger.warning', side_effect=ValueError)
+    @mock.patch('transaction._manager.TransactionManager.begin',)
+    def test_abort_exception_raises(self, fake_begin,
+                                    _fake_logger, _fake_format):
+        # begin() returns an object without abort(), which we catch.
         # Likewise for the things we try to do to log it
-        fake_logger.expects_call().raises(ValueError)
-        fake_format.expects_call().raises(ValueError)
+        fake_begin.return_value = object()
 
         def handler():
             raise Exception()
         loop = TransactionLoop(handler)
-        assert_that(calling(loop), raises(AbortFailedError))
+        with self.assertRaises(AbortFailedError):
+
+
+            loop()
+
 
     def test_abort_on_exception_logs_exception_str(self):
         from zope.testing.loggingsupport import InstalledHandler

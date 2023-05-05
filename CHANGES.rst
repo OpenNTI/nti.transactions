@@ -3,10 +3,10 @@
  Changes
 =========
 
-4.2.2 (unreleased)
+4.3.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.10 and 3.11.
 
 
 4.2.1 (2021-05-25)

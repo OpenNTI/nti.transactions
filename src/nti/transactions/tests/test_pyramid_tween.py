@@ -31,6 +31,7 @@ from nti.testing.matchers import validly_provides
 from .. import pyramid_tween
 from .._httpexceptions import HTTPBadRequest
 
+# pylint:disable=protected-access,unnecessary-lambda-assignment
 
 class MockRequest(object):
 

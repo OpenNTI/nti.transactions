@@ -65,8 +65,8 @@ class ObjectDataManager(object):
 
         :param target: An object. Optional if `call` is given. If provided, will be used
             to compute the :meth:`sortKey`.
-        :param string method_name: The name of the attribute to get from `target`. Optional if `callable`
-            is given.
+        :param string method_name: The name of the attribute to get from `target`.
+            Optional if `callable` is given.
         :param callable call: A callable object. Ignored if `target` *and* `method_name` are given.
         :param callable vote: If given, then a callable that will be called during the voting phase.
             It should raise an exception if the transaction will fail.

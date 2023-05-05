@@ -21,6 +21,7 @@ from zope import interface
 # for each and every thread or greenlet. We go through
 # lots of greenlets, so that's lots of loggers
 from transaction import _transaction
+# pylint:disable-next=protected-access
 _transaction._LOGGER = __import__('logging').getLogger('txn.GLOBAL')
 
 # Introduce a 'nti_abort' function that wraps the raw abort as a metric.
