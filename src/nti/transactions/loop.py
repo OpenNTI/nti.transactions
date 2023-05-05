@@ -535,8 +535,11 @@ class TransactionLoop(object):
     #: ..versionadded:: 4.2.0
     EVT_WILL_LAST_ATTEMPT = WillLastAttempt
 
+    # Where actually are we not doing this?
+    # pylint:disable=inconsistent-return-statements
     def __loop(self, txm, note, stats, args, kwargs):
         # pylint:disable=too-many-branches,too-many-statements,too-many-locals,too-complex
+
         attempts_remaining = self.attempts
         need_retry = self.attempts > 1
         begin = txm.begin
