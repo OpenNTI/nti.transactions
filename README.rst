@@ -17,7 +17,6 @@
 
 Extensions to the `transaction`_ package.
 
-.. contents::
 
 
 Transaction Management
