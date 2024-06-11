@@ -378,9 +378,8 @@ class TestLoop(unittest.TestCase):
         assert_that(loop, has_property('setupcalled', is_true()))
         assert_that(loop, has_property('teardowncalled', is_true()))
 
-    def test_retriable(self, loop_class=TransactionLoop, exc_type=TransientError,
-                       raise_count=1, loop_args=(), loop_kwargs=None):
-
+    def _check_retriable(self, loop_class=TransactionLoop, exc_type=TransientError,
+                         raise_count=1, loop_args=(), loop_kwargs=None):
         calls = []
         def handler():
             # exc_info should be clear on entry.
@@ -401,11 +400,14 @@ class TestLoop(unittest.TestCase):
                         is_counter(name='transaction.retry', value=raise_count)))
         return loop
 
+    def test_retriable(self):
+        self._check_retriable()
+
     def test_custom_retriable(self):
         class Loop(TransactionLoop):
             _retryable_errors = ((Exception, None),)
 
-        self.test_retriable(Loop, AssertionError)
+        self._check_retriable(Loop, AssertionError)
 
     def test_retriable_gives_up(self):
         def handler():
@@ -450,11 +452,11 @@ class TestLoop(unittest.TestCase):
                 self._sleep = self.times.append
 
         # By default, it is not called.
-        loop = self.test_retriable(Loop, raise_count=5)
+        loop = self._check_retriable(Loop, raise_count=5)
         assert_that(loop, has_property('times', []))
 
         # Setting a delay calls it
-        loop = self.test_retriable(Loop, raise_count=5, loop_kwargs={'sleep': 0.1})
+        loop = self._check_retriable(Loop, raise_count=5, loop_kwargs={'sleep': 0.1})
         # The ceiling arguments are 2**attempt - 1, so
         # 1, 3, 7, 15, 31, and sleep times are
         # 0.1, 0.3, 0.7, 1.5, 3,1
