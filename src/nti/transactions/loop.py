@@ -244,12 +244,19 @@ class TransactionLoop(object):
             retries=None, # type: int
             sleep=None, # type: float
             long_commit_duration=None, # type: float
+            transaction_manager=None,
     ):
         """
         :keyword float sleep: Sets the :attr:`sleep`.
         :keyword int retries: If given, the number of times a transaction will be
             retried. Note that this is one less than the total number of
             :attr:`attempts`
+        :keyword transaction_manager: If not None, this is what will be returned
+           from :meth:`get_transaction_manager_for_call` instead of the default
+           transaction manager.
+
+        .. versionchanged:: NEXT
+           Add the *transaction_manager* argument.
         """
         self.handler = handler
         if retries is not None:
@@ -259,6 +266,7 @@ class TransactionLoop(object):
         if sleep is not None:
             self.sleep = sleep
             self.random = random.SystemRandom()
+        self._txm = transaction_manager
 
     def __repr__(self):
         return '<%s.%s at 0x%x attempts=%s long_commit_duration=%s sleep=%s handler=%r>' % (
@@ -473,13 +481,42 @@ class TransactionLoop(object):
 
     _null_stat_collector = _NullStatCollector()
 
+    # pylint:disable-next=unused-argument
+    def get_transaction_manager_for_call(self, *args, **kwargs):
+        """
+        Return the transaction manager to use for a particular call.
+
+        By default, this is the global/default thread-local transaction manager.
+
+        The arguments are the arguments passed to ``__call__``.
+
+        Subclasses may override. The expected use case is for transactions that are
+        isolated and scoped to a particular well-defined location. Most
+        likely, you'll keep a reference to the transaction manager outside
+        the loop object (or, if the arguments don't matter, you can just call this method
+        without supplying them)
+        for later use. For example, when getting a connection from ZODB::
+
+           txm = TransactionManager()
+           loop = TransactionLoop(..., transaction_manager=txm)
+           db = ... # get ZODB DB
+           with db.open(loop.get_transaction_manager_for_call()) as conn:
+               ...
+
+        .. versionadded:: NEXT
+        """
+        # We use the thread-local global/default transaction manager.
+        # Accessing it directly is a bit faster than going through the wrapping
+        # layer. Applications should not be changing it.
+        return self._txm if self._txm is not None else transaction.manager.manager
+
     def __call__(self, *args, **kwargs):
         note = self.describe_transaction(*args, **kwargs)
 
         # We use the thread-local global/default transaction manager.
         # Accessing it directly is a bit faster than going through the wrapping
         # layer. Applications should not be changing it.
-        txm = transaction.manager.manager
+        txm = self.get_transaction_manager_for_call(*args, **kwargs)
         # We always operate in explicit mode. This makes finding
         # errors such as committing or aborting multiple times much easier,
         # and prevents us from having to worry about a mis-match between

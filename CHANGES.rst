@@ -8,6 +8,8 @@
 
 - Add support for Python 3.12 and 3.13.
 - Drop support for Python 2 and anything less than Python 3.8.
+- Add the ability to specify a transaction manager for loops to use
+  other than the default.
 
 
 4.3.0 (2023-05-05)
