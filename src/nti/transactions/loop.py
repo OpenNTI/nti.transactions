@@ -255,7 +255,7 @@ class TransactionLoop(object):
            from :meth:`get_transaction_manager_for_call` instead of the default
            transaction manager.
 
-        .. versionchanged:: NEXT
+        .. versionchanged:: 5.0.0
            Add the *transaction_manager* argument.
         """
         self.handler = handler
@@ -503,7 +503,7 @@ class TransactionLoop(object):
            with db.open(loop.get_transaction_manager_for_call()) as conn:
                ...
 
-        .. versionadded:: NEXT
+        .. versionadded:: 5.0.0
         """
         # We use the thread-local global/default transaction manager.
         # Accessing it directly is a bit faster than going through the wrapping
