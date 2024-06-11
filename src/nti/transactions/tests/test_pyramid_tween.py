@@ -3,14 +3,12 @@
 Tests for pyramid_tween.py.
 
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import json
 import unittest
+import sys
 
-from pyramid.config import Configurator
+
 from zope.component import getGlobalSiteManager
 from transaction.interfaces import TransientError
 
@@ -405,6 +403,12 @@ class TestTransactionTween(unittest.TestCase):
 class TestTransactionTweenFactory(unittest.TestCase):
 
     def setUp(self):
+        try:
+            from pyramid.config import Configurator
+        except ModuleNotFoundError as ex:
+            # pyramid 2.0.2 with webob 1.8.7 won't import on Python 3.13
+            if sys.version_info[:2] == (3, 13):
+                self.skipTest(str(ex))
         self.config = config = config = Configurator(registry=getGlobalSiteManager())
         config.setup_registry()
 

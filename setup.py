@@ -1,7 +1,7 @@
 import codecs
 from setuptools import setup, find_packages
 
-version = '4.3.1.dev0'
+version = '5.0.0.dev0'
 
 entry_points = {
     'console_scripts': [
@@ -16,7 +16,6 @@ TESTS_REQUIRE = [
     'zope.component',
     'zope.testrunner',
     'ZODB',
-    'mock; python_version == "2.7"',
 ]
 
 def _read(fname):
@@ -40,19 +39,19 @@ setup(
         'Operating System :: OS Independent',
         'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: Apache Software License',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3 :: Only',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
     ],
+    python_requires=">=3.8",
     packages=find_packages('src'),
     package_dir={'': 'src'},
     include_package_data=True,
