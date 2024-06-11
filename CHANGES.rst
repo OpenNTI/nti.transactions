@@ -3,10 +3,11 @@
  Changes
 =========
 
-4.3.1 (unreleased)
+5.0.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.12 and 3.13.
+- Drop support for Python 2 and anything less than Python 3.8.
 
 
 4.3.0 (2023-05-05)
