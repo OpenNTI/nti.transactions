@@ -1,31 +1,22 @@
 [MASTER]
 load-plugins=pylint.extensions.bad_builtin,
+   pylint.extensions.check_elif,
    pylint.extensions.code_style,
    pylint.extensions.dict_init_mutate,
+   pylint.extensions.docstyle,
    pylint.extensions.dunder,
-   pylint.extensions.emptystring,
-   pylint.extensions.comparetozero,
    pylint.extensions.comparison_placement,
    pylint.extensions.confusing_elif,
    pylint.extensions.for_any_all,
    pylint.extensions.consider_refactoring_into_while_condition,
    pylint.extensions.mccabe,
-   pylint.extensions.check_elif,
    pylint.extensions.eq_without_hash,
+   pylint.extensions.redefined_variable_type,
    pylint.extensions.overlapping_exceptions,
-
-# Requires you to have parameters docemented with types.
-# This is a good thing! But there are a bunch of cases that don't
-# have it here, and right now I don't want to add them.
-#   pylint.extensions.docparams,
-
-# Prevents you from doing::
-#
-#   stmts = [make_part(p) for p in stuff]
-#   stmts = ''.join(stmts)
-#
-# We use that pattern a lot here.
-#   pylint.extensions.redefined_variable_type,
+   pylint.extensions.docparams,
+   pylint.extensions.private_import,
+   pylint.extensions.set_membership,
+   pylint.extensions.typing,
 
 # magic_value wants you to not use arbitrary strings and numbers
 # inline in the code. But it's overzealous and has way too many false
@@ -66,6 +57,7 @@ load-plugins=pylint.extensions.bad_builtin,
 init-hook =
     import astroid.bases
     astroid.bases.POSSIBLE_PROPERTIES.add('Lazy')
+    astroid.bases.POSSIBLE_PROPERTIES.add('LazyOnClass')
     astroid.bases.POSSIBLE_PROPERTIES.add('readproperty')
     astroid.bases.POSSIBLE_PROPERTIES.add('non_overridable')
     import os
@@ -128,8 +120,13 @@ init-hook =
 # Into ``if (foo := get_foo()):``
 # But there are a *lot* of those. Trust people to do the right, most
 # readable, thing
-# raise-missing-from: Py2 compatibility
-# super-with-arguments: Py2
+#
+# docstring-first-line-empty: That's actually our standard, based on Django.
+# XXX: unclear on the docstring warnings, missing-type-doc, missing-param-doc,
+# differing-param-doc, differing-type-doc (are the last two replacements for the first two?)
+#
+# They should be addressed, in general they are a good thing, but sometimes they are
+# unnecessary.
 disable=wrong-import-position,
     wrong-import-order,
     missing-docstring,
@@ -147,9 +144,12 @@ disable=wrong-import-position,
     consider-using-f-string,
     consider-using-assignment-expr,
     use-dict-literal,
-    raise-missing-from,
-    super-with-arguments,
-    redundant-u-string-prefix
+    missing-type-doc,
+    missing-param-doc,
+    differing-param-doc,
+    differing-type-doc,
+    compare-to-zero,
+    docstring-first-line-empty,
 
 enable=consider-using-augmented-assign
 
@@ -193,6 +193,7 @@ generated-members=REQUEST,acl_users,aq_parent,providedBy
 # and thus existing member attributes cannot be deduced by static analysis. It
 # supports qualified module names, as well as Unix pattern matching.
 #ignored-modules=gevent._corecffi,gevent.os,os,greenlet,threading,gevent.libev.corecffi,gevent.socket,gevent.core,gevent.testing.support
+ignored-modules=psycopg2.errors
 
 [DESIGN]
 max-attributes=12

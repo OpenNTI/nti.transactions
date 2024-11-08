@@ -1,57 +1,63 @@
-# Generated from:
-# https://github.com/zopefoundation/meta/tree/master/config/pure-python
 name: tests
 
-on:
-  push:
-  pull_request:
-  schedule:
-    - cron: '0 12 * * 0'  # run once a week on Sunday
-  # Allow to run this workflow manually from the Actions tab
-  workflow_dispatch:
+on: [push, pull_request]
+
+env:
+  PYTHONHASHSEED: 1042466059
+  ZOPE_INTERFACE_STRICT_IRO: 1
+
+
 
 jobs:
-  build:
+  test:
     strategy:
-      # We want to see all failures:
-      fail-fast: false
       matrix:
-        os:
-        - ["ubuntu", "ubuntu-latest"]
-        config:
-        # [Python version, tox env]
-        - ["3.12",   "lint"]
-        - ["3.8",   "py38"]
-        - ["3.9",   "py39"]
-        - ["3.10",  "py310"]
-        - ["3.11",  "py311"]
-        - ["3.12",  "py312"]
-        - ["3.13.0-beta.1",  "py313"]
-        - ["pypy-3.10", "pypy3"]
-        - ["3.12",   "docs"]
-        - ["3.12",   "coverage"]
+        python-version:
+          - "pypy-3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+        extras:
+          - "[test,docs]"
+        include:
+          - python-version: "3.13"
+            extras: "[test,docs,gevent,pyramid]"
 
-    runs-on: ${{ matrix.os[1] }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    name: ${{ matrix.config[1] }}
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.config[0] }}
+        python-version: ${{ matrix.python-version }}
         cache: 'pip'
-        cache-dependency-path: setup.py
+        cache-dependency-path: 'setup.py'
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install tox
+        python -m pip install -U pip setuptools wheel
+        python -m pip install -U coverage
+        python -m pip install -U ".${{ matrix.extras }}"
     - name: Test
-      run: tox -e ${{ matrix.config[1] }}
-    - name: Coverage
-      if: matrix.config[1] == 'coverage'
       run: |
-        pip install coveralls coverage-python-version
-        coveralls --service=github
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        coverage run -m zope.testrunner --test-path=src  --auto-color --auto-progress
+        coverage run -a -m sphinx -b doctest -d docs/_build/doctrees docs docs/_build/doctests
+        coverage combine || true
+        coverage report -i || true
+    - name: Lint
+      if: matrix.python-version == '3.12'
+      run: |
+        python -m pip install -U pylint
+        pylint nti.transactions
+    - name: Submit to Coveralls
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel: true
+
+  coveralls_finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Coveralls Finished
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel-finished: true
