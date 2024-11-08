@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function, absolute_import, division
-
 # pylint:disable=too-many-public-methods
 # pylint:disable=import-outside-toplevel
 
@@ -59,32 +57,14 @@ from ZODB import DB
 from ZODB.DemoStorage import DemoStorage
 from ZODB.POSException import StorageError
 
-try:
-    from unittest import mock
-except ImportError:
-    import mock
+from unittest import mock
 
-
-if str is bytes:
-    # The Python 2 version of hamcrest has a bug
-    # where it assumes the mismatch_description is
-    # not None in one branch.
-    from hamcrest.core.core.allof import AllOf
-    from hamcrest.core.string_description import StringDescription
-    old_func = AllOf.matches.__func__
-    def matches(self, item, mismatch_description=None):
-        if mismatch_description is None:
-            mismatch_description = StringDescription()
-        # pylint:disable-next=too-many-function-args
-        return old_func(self, item, mismatch_description)
-
-    AllOf.matches = matches
 
 # pylint:disable=protected-access,broad-exception-raised
 
 class Test_Do_Commit(unittest.TestCase):
     class Transaction(object):
-        description = u''
+        description = ''
         def __init__(self, t=None):
             self.t = t
 
@@ -378,7 +358,9 @@ class TestLoop(unittest.TestCase):
         assert_that(loop, has_property('setupcalled', is_true()))
         assert_that(loop, has_property('teardowncalled', is_true()))
 
-    def _check_retriable(self, loop_class=TransactionLoop, exc_type=TransientError,
+
+    def _check_retriable(self,  loop_class=TransactionLoop, exc_type=TransientError,
+                         *,
                          raise_count=1, loop_args=(), loop_kwargs=None):
         calls = []
         def handler():
@@ -486,11 +468,11 @@ class TestLoop(unittest.TestCase):
 
         class Loop(TransactionLoop):
             def describe_transaction(self, *args, **kwargs):
-                return u"Hi"
+                return "Hi"
 
         result = Loop(lambda: 42)()
         assert_that(result, is_(42))
-        fake_tx.note.assert_called_with(u'Hi')
+        fake_tx.note.assert_called_with('Hi')
         fake_tx.nti_abort.assert_called_once()
 
 
@@ -670,7 +652,7 @@ class TestLoop(unittest.TestCase):
         class Tx(object):
             @staticmethod
             def nti_abort():
-                "Does nothing"
+                """Nothing"""
 
         loop._abort_on_exception(exc_info, True, 4, Tx)
 

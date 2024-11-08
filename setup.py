@@ -54,7 +54,6 @@ setup(
     packages=find_namespace_packages(where='src'),
     package_dir={'': 'src'},
     include_package_data=True,
-    tests_require=TESTS_REQUIRE,
     install_requires=[
         'six',
         'perfmetrics',
