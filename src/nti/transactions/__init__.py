@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-.. $Id$
+nti.transactions module.
+
+Performs monkey patches when imported.
 """
 
-from __future__ import print_function, absolute_import, division
-__docformat__ = "restructuredtext en"
 
-logger = __import__('logging').getLogger(__name__)
 
-DEFAULT_LONG_RUNNING_COMMIT_IN_SECS = 6
 from perfmetrics import Metric
 from zope import interface
+
+DEFAULT_LONG_RUNNING_COMMIT_IN_SECS = 6
 
 ###
 # Monkey-patches
@@ -20,7 +20,7 @@ from zope import interface
 # By default, it wants to create a different logger
 # for each and every thread or greenlet. We go through
 # lots of greenlets, so that's lots of loggers
-from transaction import _transaction
+from transaction import _transaction # pylint:disable=import-private-name
 # pylint:disable-next=protected-access
 _transaction._LOGGER = __import__('logging').getLogger('txn.GLOBAL')
 

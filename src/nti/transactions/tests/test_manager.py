@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function, absolute_import, division
 
 import unittest
 
@@ -51,7 +50,7 @@ class TestObjectDataManager(AbstractTestBase):
     def test_callable_name(self):
         class X(object):
             def thing(self):
-                "Does nothing"
+                """Nothing"""
 
         x = X()
         odm = do(target=x, method_name='thing')

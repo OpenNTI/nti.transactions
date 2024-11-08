@@ -4,22 +4,12 @@
 Support for transactionally working with queues.
 """
 
-from __future__ import print_function, absolute_import, division
-__docformat__ = "restructuredtext en"
-
-logger = __import__('logging').getLogger(__name__)
-
 import transaction
 
-try:
-    from queue import Full as QFull
-except ImportError: # pragma: no cover
-    # Py2
-    # The gevent.queue.Full class is just an alias
-    # for the stdlib class, on both Py2 and Py3
-    from Queue import Full as QFull
+from queue import Full as QFull
 
-from nti.transactions.manager import ObjectDataManager
+
+from .manager import ObjectDataManager
 
 __all__ = [
     'put_nowait',
@@ -33,7 +23,7 @@ class _QueuePutDataManager(ObjectDataManager):
     """
 
     def __init__(self, queue, method, args=()):
-        super(_QueuePutDataManager, self).__init__(target=queue, call=method, args=args)
+        super().__init__(target=queue, call=method, args=args)
         # NOTE: See the `sortKey` method. The use of the queue as the target
         # is critical to ensure that the FIFO property holds when multiple objects
         # are added to a queue during a transaction

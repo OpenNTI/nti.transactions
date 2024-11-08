@@ -20,12 +20,6 @@ from logging import getLogger
 import sys
 import time
 import random
-try:
-    from sys import exc_clear
-except ImportError: # pragma: no cover
-    def exc_clear():
-        "Does nothing"
-        # Python 3 guarantees this natively.
 
 import six
 
@@ -241,11 +235,11 @@ class TransactionLoop(object):
 
     def __init__(
             self, handler,
-            retries=None, # type: int
-            sleep=None, # type: float
-            long_commit_duration=None, # type: float
+            retries:int=None,
+            sleep:float=None,
+            long_commit_duration:float=None,
             transaction_manager=None,
-    ):
+    ): # pylint:disable=too-many-positional-arguments
         """
         :keyword float sleep: Sets the :attr:`sleep`.
         :keyword int retries: If given, the number of times a transaction will be
@@ -473,11 +467,11 @@ class TransactionLoop(object):
     class _NullStatCollector(object):
         @staticmethod
         def __call__(name, count=1):
-            "Does nothing"
+            """Does nothing"""
 
         @staticmethod
         def flush():
-            "Does nothing"
+            """Does nothing"""
 
     _null_stat_collector = _NullStatCollector()
 
@@ -572,8 +566,8 @@ class TransactionLoop(object):
     #: ..versionadded:: 4.2.0
     EVT_WILL_LAST_ATTEMPT = WillLastAttempt
 
-    # Where actually are we not doing this?
-    # pylint:disable=inconsistent-return-statements
+    # Where actually are we not using a return statement? ?
+    # pylint:disable-next=too-many-positional-arguments,inconsistent-return-statements
     def __loop(self, txm, note, stats, args, kwargs):
         # pylint:disable=too-many-branches,too-many-statements,too-many-locals,too-complex
 
@@ -587,9 +581,7 @@ class TransactionLoop(object):
             attempts_remaining -= 1
             # Starting at 0 for convenience
             attempt_number = self.attempts - attempts_remaining - 1
-            # Throw away any previous exceptions our loop raised.
-            # The TB could be taking lots of memory
-            exc_clear()
+
             # Bad synchronizers could cause this to raise.
             # That's not good.
             try:

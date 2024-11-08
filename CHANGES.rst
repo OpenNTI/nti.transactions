@@ -3,10 +3,11 @@
  Changes
 =========
 
-5.0.1 (unreleased)
+5.1.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Drop support for anything earlier than Python 3.10.
+- Use native namespace packages.
 
 
 5.0.0 (2024-06-11)

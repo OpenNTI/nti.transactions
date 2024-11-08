@@ -36,19 +36,18 @@ If you have a tween that manages a ZODB connection, it should be installed
 joined to a transaction; the transaction must be committed or aborted first.
 """
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
+import logging
 
-logger = __import__('logging').getLogger(__name__)
 
-from nti.transactions._httpexceptions import HTTPBadRequest
-from nti.transactions._httpexceptions import HTTPException
-from nti.transactions._loglevels import TRACE
-from nti.transactions.loop import TransactionLoop
-from nti.transactions.interfaces import WillFirstAttemptWithRequest
-from nti.transactions.interfaces import WillRetryAttemptWithRequest
-from nti.transactions.interfaces import WillLastAttemptWithRequest
+from ._httpexceptions import HTTPBadRequest
+from ._httpexceptions import HTTPException
+from ._loglevels import TRACE
+from .loop import TransactionLoop
+from .interfaces import WillFirstAttemptWithRequest
+from .interfaces import WillRetryAttemptWithRequest
+from .interfaces import WillLastAttemptWithRequest
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'commit_veto',
@@ -99,7 +98,7 @@ def is_side_effect_free(request):
     polling (which does have side effects on GET requests), while
     still supporting serving the static resources of socket.io.
     """
-    if request.method in ('GET', 'HEAD'):
+    if request.method in {'GET', 'HEAD'}:
         # GET/HEAD requests must NEVER have side effects.
         if 'socket.io' in request.url:
             # (Unfortunately, socket.io polling does)
@@ -241,14 +240,14 @@ class TransactionTween(TransactionLoop):
         # we are now sure the body is seekable.)
         # pylint:disable-next=compare-to-zero
         if attempt_number == 0 \
-           and request.method in ('POST', 'PUT') \
+           and request.method in {'POST', 'PUT'} \
            and request.content_type == 'application/x-www-form-urlencoded':
             # This needs tested.
             body = request.body
             # Python 3 treats bytes different than strings. Iteration
             # and indexing don't iterate over one-byte strings, they return
             # *integers*. 123 and 91 are the integers for { and [
-            if body and body[0] in (b'{', b'[', 123, 91):
+            if body and body[0] in {b'{', b'[', 123, 91}:
                 # encoded data will never start with these values, they would be
                 # escaped. so this must be meant to be JSON
                 request.content_type = 'application/json'

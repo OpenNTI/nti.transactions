@@ -1,5 +1,6 @@
 import codecs
-from setuptools import setup, find_packages
+from setuptools import setup
+from setuptools import find_namespace_packages
 
 version = '5.0.1.dev0'
 
@@ -41,8 +42,6 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
@@ -51,16 +50,13 @@ setup(
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
     ],
-    python_requires=">=3.8",
-    packages=find_packages('src'),
+    python_requires=">=3.10",
+    packages=find_namespace_packages(where='src'),
     package_dir={'': 'src'},
     include_package_data=True,
-    namespace_packages=['nti'],
-    tests_require=TESTS_REQUIRE,
     install_requires=[
         'six',
         'perfmetrics',
-        'setuptools',
         'transaction >= 3.0.0',
         'zope.cachedescriptors',
         'zope.exceptions',

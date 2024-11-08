@@ -4,11 +4,6 @@
 Support for data managers.
 """
 
-from __future__ import print_function, absolute_import, division
-__docformat__ = "restructuredtext en"
-
-logger = __import__('logging').getLogger(__name__)
-
 from zope import interface
 
 import transaction
@@ -56,6 +51,7 @@ class ObjectDataManager(object):
 
     _EMPTY_KWARGS = {}
 
+    # pylint:disable-next=too-many-positional-arguments
     def __init__(self, target=None, method_name=None, call=None,
                  vote=None, args=(), kwargs=None):
         """
@@ -131,12 +127,12 @@ class ObjectDataManager(object):
 
     # No subtransaction support.
     def abort_sub(self, tx):
-        "Does nothing"
+        """Does nothing"""
 
     commit_sub = abort_sub
 
     def beforeCompletion(self, tx):
-        "Does nothing"
+        """Does nothing"""
 
     afterCompletion = beforeCompletion
 
@@ -182,7 +178,7 @@ class OrderedNearEndObjectDataManager(ObjectDataManager):
         Sort prepended with z's in an attempt to execute after other data
         managers.
         """
-        parent_key = super(OrderedNearEndObjectDataManager, self).sortKey()
+        parent_key = super().sortKey()
         sort_str = str(self.target) if self.target is not None else str(self.callable)
         return 'zzz%s:%s' % (sort_str, parent_key)
 

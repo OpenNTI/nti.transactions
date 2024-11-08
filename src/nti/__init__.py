@@ -1,1 +1,1 @@
-__import__('pkg_resources').declare_namespace(__name__) # pragma: no cover
+from pkgutil import extend_path; __path__ = extend_path(__path__, __name__) # pylint:disable=multiple-statements
