@@ -2,7 +2,7 @@ import codecs
 from setuptools import setup
 from setuptools import find_namespace_packages
 
-version = '5.0.1.dev0'
+version = '5.1.0'
 
 entry_points = {
     'console_scripts': [

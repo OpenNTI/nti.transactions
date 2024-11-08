@@ -3,7 +3,7 @@
  Changes
 =========
 
-5.1.0 (unreleased)
+5.1.0 (2024-11-08)
 ==================
 
 - Drop support for anything earlier than Python 3.10.
