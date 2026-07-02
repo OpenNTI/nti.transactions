@@ -3,10 +3,10 @@
  Changes
 =========
 
-5.1.1 (unreleased)
+5.2.0 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.14 and 3.15.
 
 
 5.1.0 (2024-11-08)

@@ -46,6 +46,8 @@ setup(
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: 3.15',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: ZODB',
@@ -70,8 +72,7 @@ setup(
             'Sphinx',
             'repoze.sphinx.autointerface',
             'pyhamcrest',
-            'furo; python_version >= "3.6"',
-            'sphinx_rtd_theme; python_version < "3.6"',
+            'furo',
         ],
         'pyramid': [
             'pyramid >= 1.2',
